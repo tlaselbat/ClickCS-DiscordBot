@@ -79,4 +79,26 @@ function setupVoiceStateUpdate(client) {
   });
 }
 
-module.exports = setupVoiceStateUpdate;
+const fs = require('fs');
+const path = require('path');
+
+/**
+ * Loads and registers all event handlers
+ * @param {Client} client - The Discord client instance
+ */
+module.exports = (client) => {
+    const eventFiles = fs.readdirSync(path.join(__dirname, 'events'))
+        .filter(file => file.endsWith('.js'));
+
+    for (const file of eventFiles) {
+        const event = require(`./events/${file}`);
+        const eventName = file.split('.')[0];
+        
+        if (eventName === 'ready') {
+            event(client);
+        } else {
+            client.on(eventName, (...args) => event(...args, client));
+        }
+    }
+    setupVoiceStateUpdate(client);
+};

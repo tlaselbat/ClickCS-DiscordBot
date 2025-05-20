@@ -1,0 +1,9 @@
+{
+  "prefix": "!",
+  "token": "YOUR_BOT_TOKEN",
+  "ownerID": "YOUR_OWNER_ID",
+  "defaultStatus": "with Discord",
+  "maxRetries": 3,
+  "retryDelay": 2000,
+  "version": "1.0.0"
+}
