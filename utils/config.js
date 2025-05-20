@@ -16,6 +16,52 @@ class Config {
      */
     constructor() {
         this.config = null;
+        this.defaultConfig = {
+            bot: {
+                prefix: "!",
+                defaultStatus: "with Discord",
+                version: "1.0.0",
+                maxRetries: 3,
+                retryDelay: 2000
+            },
+            permissions: {
+                ownerID: ""
+            },
+            channels: {
+                voiceChannel: {
+                    name: "in vc",
+                    color: "#00ff00",
+                    mentionable: true
+                }
+            },
+            roles: {
+                voiceChannel: {
+                    name: "in vc",
+                    color: "#00ff00",
+                    mentionable: true
+                }
+            },
+            logging: {
+                level: "info",
+                file: {
+                    maxSize: "5MB",
+                    maxFiles: 5
+                }
+            },
+            database: {
+                enabled: false,
+                type: "sqlite",
+                path: "./data/bot.db"
+            },
+            ratelimits: {
+                commands: {
+                    default: {
+                        cooldown: 3000,
+                        maxUses: 5
+                    }
+                }
+            }
+        };
     }
 
     /**
@@ -27,8 +73,30 @@ class Config {
     async load() {
         try {
             const configPath = path.join(__dirname, '../config/bot-config.json');
-            const configContent = await fs.readFile(configPath, 'utf-8');
-            this.config = JSON.parse(configContent);
+            
+            // Try to load config file
+            let configContent;
+            try {
+                configContent = await fs.readFile(configPath, 'utf-8');
+                this.config = JSON.parse(configContent);
+            } catch (error) {
+                // If file doesn't exist, create it with default config
+                if (error.code === 'ENOENT') {
+                    logger.warn('Config file not found, creating with default values');
+                    await fs.writeFile(configPath, JSON.stringify(this.defaultConfig, null, 2));
+                    this.config = this.defaultConfig;
+                } else {
+                    throw error;
+                }
+            }
+
+            // Validate required fields
+            if (!this.config.bot?.prefix) {
+                throw new Error('Bot prefix is required in configuration');
+            }
+            if (!this.config.permissions?.ownerID) {
+                throw new Error('Owner ID is required in configuration');
+            }
 
             logger.info('Configuration loaded successfully');
             return this.config;
@@ -45,35 +113,55 @@ class Config {
      * Get a configuration value
      * @param {string} path - Path to the configuration value (e.g., 'bot.prefix')
      * @returns {*} The configuration value
+     * @throws {Error} If configuration is not loaded or path is invalid
      */
     get(path) {
         if (!this.config) {
             throw new Error('Configuration not loaded');
         }
 
-        return path.split('.').reduce((obj, key) => obj && obj[key], this.config);
+        const keys = path.split('.');
+        let value = this.config;
+
+        for (const key of keys) {
+            if (value[key] === undefined) {
+                throw new Error(`Configuration path '${path}' not found`);
+            }
+            value = value[key];
+        }
+
+        return value;
     }
 
     /**
-     * Set a configuration value
-     * @param {string} path - Path to the configuration value
-     * @param {*} value - The new value
-     * @returns {void}
+     * Get nested configuration object
+     * @param {string} path - Path to the configuration object (e.g., 'bot')
+     * @returns {Object} The nested configuration object
      */
-    set(path, value) {
+    getSection(path) {
         if (!this.config) {
             throw new Error('Configuration not loaded');
         }
 
         const keys = path.split('.');
-        const lastKey = keys.pop();
-        let obj = this.config;
+        let value = this.config;
 
         for (const key of keys) {
-            obj = obj[key] = obj[key] || {};
+            if (value[key] === undefined) {
+                throw new Error(`Configuration path '${path}' not found`);
+            }
+            value = value[key];
         }
 
-        obj[lastKey] = value;
+        return value;
+    }
+
+    /**
+     * Get default configuration
+     * @returns {Object} Default configuration object
+     */
+    getDefaultConfig() {
+        return this.defaultConfig;
     }
 }
 
