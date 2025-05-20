@@ -10,6 +10,28 @@ A Discord bot that manages voice channel access and role assignments automatical
 - Persistent configuration storage
 - Error handling and logging
 
+## Commands
+
+### VC Access Management
+
+`/vc-access`
+- **Description**: Toggle voice channel access permissions
+- **Options**:
+  - `enable` (boolean, required): Enable or disable VC access
+  - `channel` (channel, optional): Channel to grant access to when in VC
+- **Permissions Required**: Manage Channels
+- **Example**: `/vc-access enable:true channel:#general` - Enables VC access for the general channel
+
+### VC Role Management
+
+`/vc-role`
+- **Description**: Toggle voice channel role assignments
+- **Options**:
+  - `enable` (boolean, required): Enable or disable VC role assignment
+  - `role` (role, optional): Role to assign when in VC
+- **Permissions Required**: Manage Roles
+- **Example**: `/vc-role enable:true role:@members` - Enables VC role assignment for the members role
+
 ## Setup
 
 1. Install dependencies:
