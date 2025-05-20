@@ -4,7 +4,8 @@
 	"description": "discord bot",
 	"main": "main.js",
 	"dependencies": {
-		"discord.js": "12.5.1"
+		"discord.js": "^14.14.1",
+		"@discordjs/voice": "^0.16.0"
 	},
 	"devDependencies": {},
 	"scripts": {
