@@ -5,6 +5,7 @@
 
 const fs = require('fs').promises;
 const path = require('path');
+const { existsSync, mkdirSync } = require('fs');
 
 /**
  * VC configuration interface
@@ -22,6 +23,7 @@ class VCConfig {
     /**
      * Creates a new VCConfig instance
      * @param {string} configDir - Directory to store configuration files
+     * @throws {Error} If config directory cannot be created
      */
     constructor(configDir) {
         this.configDir = configDir;
@@ -31,6 +33,15 @@ class VCConfig {
             roleAssignmentEnabled: false,
             roleId: null
         };
+
+        // Ensure config directory exists
+        if (!existsSync(configDir)) {
+            try {
+                mkdirSync(configDir, { recursive: true });
+            } catch (error) {
+                throw new Error(`Failed to create config directory: ${error.message}`);
+            }
+        }
     }
 
     /**
@@ -46,14 +57,25 @@ class VCConfig {
      * Get VC configuration for a guild
      * @param {string} guildId - The guild ID
      * @returns {Promise<VCConfig>} The VC configuration
+     * @throws {Error} If configuration cannot be loaded
      */
     async getVCConfig(guildId) {
+        const configPath = this.getConfigPath(guildId);
         try {
-            const configPath = this.getConfigPath(guildId);
+            // Check if file exists
+            const fileExists = await fs.access(configPath).then(() => true).catch(() => false);
+
+            if (!fileExists) {
+                // Create default config if file doesn't exist
+                await this.saveVCConfig(guildId, this.defaultConfig);
+                return { ...this.defaultConfig };
+            }
+
             const config = await fs.readFile(configPath, 'utf8');
             return JSON.parse(config);
         } catch (error) {
-            // If file doesn't exist, return default config
+            console.error(`Error loading config for guild ${guildId}:`, error);
+            // Return default config on error
             return { ...this.defaultConfig };
         }
     }
@@ -63,10 +85,43 @@ class VCConfig {
      * @param {string} guildId - The guild ID
      * @param {VCConfig} config - The VC configuration to save
      * @returns {Promise<void>}
+     * @throws {Error} If configuration cannot be saved
      */
     async saveVCConfig(guildId, config) {
         const configPath = this.getConfigPath(guildId);
-        await fs.writeFile(configPath, JSON.stringify(config, null, 2));
+        try {
+            // Ensure parent directory exists
+            const parentDir = path.dirname(configPath);
+            if (!existsSync(parentDir)) {
+                mkdirSync(parentDir, { recursive: true });
+            }
+
+            await fs.writeFile(configPath, JSON.stringify(config, null, 2));
+        } catch (error) {
+            throw new Error(`Failed to save config for guild ${guildId}: ${error.message}`);
+        }
+    }
+
+    /**
+     * Get all guild configurations
+     * @returns {Promise<Record<string, VCConfig>>} Map of guild IDs to their configurations
+     */
+    async getAllConfigs() {
+        try {
+            const files = await fs.readdir(this.configDir);
+            const configs = {};
+
+            for (const file of files) {
+                if (file.endsWith('.json')) {
+                    const guildId = file.replace('.json', '');
+                    configs[guildId] = await this.getVCConfig(guildId);
+                }
+            }
+
+            return configs;
+        } catch (error) {
+            throw new Error(`Failed to read all configs: ${error.message}`);
+        }
     }
 }
 
