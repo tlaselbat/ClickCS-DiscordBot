@@ -7,6 +7,8 @@ const Discord = require('discord.js');
 const dotenv = require('dotenv');
 const logger = require('./utils/logger');
 const config = require('./utils/config');
+const VCConfig = require('./utils/vc-config');
+const path = require('path');
 
 /**
  * Discord client instance with configured intents
@@ -46,7 +48,9 @@ function createClient() {
         }
     };
 
-    return new Discord.Client(clientConfig);
+    const newClient = new Discord.Client(clientConfig);
+    newClient.config = new VCConfig(path.join(__dirname, 'config'));
+    return newClient;
 }
 
 /**

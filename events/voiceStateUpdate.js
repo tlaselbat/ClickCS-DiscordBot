@@ -3,7 +3,7 @@
  * @module events/voiceStateUpdate
  */
 
-const { GuildMember, VoiceState } = require('discord.js');
+const { GuildMember, VoiceState, Permissions } = require('discord.js');
 const logger = require('../utils/logger');
 
 /**
@@ -19,7 +19,7 @@ const ROLE_NAME = 'in vc';
  * @param {Client} client - The Discord client instance
  * @throws {Error} If role management fails
  */
-module.exports = async (oldState, newState, client) => {
+async function handleVoiceStateUpdate(oldState, newState, client) {
     try {
         // Early return if no state change
         if (oldState.channelId === newState.channelId) {
@@ -51,6 +51,42 @@ module.exports = async (oldState, newState, client) => {
         
         logger.info(`Successfully ${action}ed "${ROLE_NAME}" role to ${member.user.tag} in ${guild.name}`);
         
+        // Handle channel access and role assignment
+        try {
+            const config = await client.config.getVCConfig(guild.id);
+            
+            // Handle channel access
+            if (config.channelAccessEnabled && config.channelId) {
+                const channel = guild.channels.cache.get(config.channelId);
+                if (channel) {
+                    const permissions = channel.permissionsFor(member);
+                    
+                    if (newState.channelId && !permissions.has(Permissions.FLAGS.VIEW_CHANNEL)) {
+                        await channel.permissionOverwrites.edit(member, {
+                            VIEW_CHANNEL: true
+                        });
+                    } else if (!newState.channelId && permissions.has(Permissions.FLAGS.VIEW_CHANNEL)) {
+                        await channel.permissionOverwrites.edit(member, {
+                            VIEW_CHANNEL: false
+                        });
+                    }
+                }
+            }
+
+            // Handle role assignment
+            if (config.roleAssignmentEnabled && config.roleId) {
+                const role = guild.roles.cache.get(config.roleId);
+                if (role) {
+                    if (newState.channelId && !member.roles.cache.has(role.id)) {
+                        await member.roles.add(role);
+                    } else if (!newState.channelId && member.roles.cache.has(role.id)) {
+                        await member.roles.remove(role);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error handling voice state update:', error);
+        }
     } catch (error) {
         logger.error('Error in voiceStateUpdate event handler:', {
             error: error.message,
@@ -60,4 +96,6 @@ module.exports = async (oldState, newState, client) => {
         });
         throw error; // Let the event loader handle the error
     }
-};
+}
+
+module.exports = handleVoiceStateUpdate;
