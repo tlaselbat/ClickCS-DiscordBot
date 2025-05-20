@@ -1,9 +1,39 @@
 {
-  "prefix": "!",
-  "token": "YOUR_BOT_TOKEN",
-  "ownerID": "YOUR_OWNER_ID",
-  "defaultStatus": "with Discord",
-  "maxRetries": 3,
-  "retryDelay": 2000,
-  "version": "1.0.0"
+    "bot": {
+        "prefix": "!",
+        "defaultStatus": "with Discord",
+        "version": "1.0.0",
+        "maxRetries": 3,
+        "retryDelay": 2000
+    },
+    "permissions": {
+        "ownerID": "YOUR_OWNER_ID"
+    },
+    "roles": {
+        "voiceChannel": {
+            "name": "in vc",
+            "color": "#00ff00",
+            "mentionable": true
+        }
+    },
+    "logging": {
+        "level": "info",
+        "file": {
+            "maxSize": "5MB",
+            "maxFiles": 5
+        }
+    },
+    "database": {
+        "enabled": false,
+        "type": "sqlite",
+        "path": "./data/bot.db"
+    },
+    "ratelimits": {
+        "commands": {
+            "default": {
+                "cooldown": 3000,
+                "maxUses": 5
+            }
+        }
+    }
 }
