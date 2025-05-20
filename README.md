@@ -1,5 +1,5 @@
 # ClickCS-VCBot
-Simple discord bot built with discord.js that adds the role "in vc" to those who are in vc
+Simple discord bot built with discord.js v14+ that adds the role "in vc" to those who are in vc
 
 ## Requirements:
 Have the role "in vc" in your server
