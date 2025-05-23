@@ -1,59 +1,30 @@
-/**
- * @file ready.js
- * Handles the Discord client ready event
- * @author Your Name
- * @version 1.0.0
- */
+const { Client, GatewayIntentBits, ActivityType } = require('discord.js');
+const token = process.env.DISCORD_TOKEN || 'YOUR_BOT_TOKEN'; // Replace with your actual bot token
 
-const { ActivityType } = require("discord.js");
-const logger = require('../utils/logger');
-const config = require('../utils/config');
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildVoiceStates
+    ]
+});
 
-/**
- * Event handler for when the Discord client is ready
- * @async
- * @param {Client} client - The Discord.js client instance
- * @returns {Promise<void>}
- * @throws {Error} If presence setup fails
- */
-module.exports = async (client) => {
-    try {
-        if (!client || !client.user || !client.guilds) {
-            logger.warn('Client instance not fully initialized, skipping ready event');
-            return;
-        }
+client.on('ready', () => {
+    console.log(`Logged in as ${client.user.tag}!`);
 
-        // Wait for guilds to be fully cached
-        await client.guilds.fetch().catch(() => {
-            logger.warn('Failed to fetch guilds, continuing without presence update');
-        });
+    // Update presence
+    client.user.setPresence({
+        activities: [{
+            name: 'Streaming on Twitch',
+            type: ActivityType.Streaming,
+            state: 'https://www.twitch.tv/your_twitch_channel',
+            url: 'https://www.twitch.tv/your_twitch_channel'
+        }],
+        status: 'online'
+    });
 
-        const guildCount = client.guilds.cache.size;
-        const timestamp = new Date().toISOString();
-        const botTag = client.user.tag;
+    // Log guild count
+    console.log(`Serving ${client.guilds.cache.size} servers`);
+});
 
-        logger.info(`Bot ${botTag} is ready!`, {
-            timestamp,
-            guildCount,
-            uptime: process.uptime()
-        });
-
-        // Update presence
-        await client.user.setPresence({
-            activities: [{
-                name: `on ${guildCount} servers`,
-                type: ActivityType.Watching
-            }],
-            status: 'online'
-        }).catch(error => {
-            logger.warn('Failed to update presence:', error);
-        });
-
-    } catch (error) {
-        logger.error('Error in ready event:', {
-            error: error.message,
-            stack: error.stack
-        });
-        // Don't throw here, just log and continue
-    }
-};
+// Login the client
+client.login(token).catch(console.error);

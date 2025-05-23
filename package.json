@@ -5,10 +5,9 @@
 	"main": "main.js",
 	"dependencies": {
 		"discord.js": "^14.14.1",
-		"winston": "^3.11.0",
-		"dotenv": "^16.3.1"
+		"dotenv": "^16.5.0",
+		"winston": "^3.11.0"
 	},
-	"devDependencies": {},
 	"scripts": {
 		"start": "powershell -command Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force; ./scripts/startNOW.ps1",
 		"stop": "powershell -command Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force; ./scripts/stahpplease.ps1",
