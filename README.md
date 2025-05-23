@@ -1,88 +1,110 @@
-# ClickCS VC Bot
+# ClickCS-VCBot
 
-A Discord bot that manages voice channel access and role assignments automatically.
+A robust Discord bot for managing voice channels, roles, and server interactions with comprehensive configuration options and error handling.
 
-## Features
+## ✨ Features
 
-- Automatically manages "in vc" roles when users join/leave voice channels
+### 🎙️ Voice Channel Management
+- Automatic role assignment when users join/leave voice channels
 - Configurable channel access permissions
-- Role assignment based on voice channel presence
-- Persistent configuration storage
-- Error handling and logging
+- Per-guild configuration system
+- Persistent storage of settings
 
-## Commands
+### ⚙️ Commands
 
-### VC Access Management
-
+#### VC Access Management
 `/vc-access`
 - **Description**: Toggle voice channel access permissions
 - **Options**:
   - `enable` (boolean, required): Enable or disable VC access
   - `channel` (channel, optional): Channel to grant access to when in VC
 - **Permissions Required**: Manage Channels
-- **Example**: `/vc-access enable:true channel:#general` - Enables VC access for the general channel
+- **Example**: `/vc-access enable:true channel:#general`
 
-### VC Role Management
-
+#### VC Role Management
 `/vc-role`
 - **Description**: Toggle voice channel role assignments
 - **Options**:
   - `enable` (boolean, required): Enable or disable VC role assignment
   - `role` (role, optional): Role to assign when in VC
 - **Permissions Required**: Manage Roles
-- **Example**: `/vc-role enable:true role:@members` - Enables VC role assignment for the members role
+- **Example**: `/vc-role enable:true role:@members`
 
-## Setup
+## 🚀 Quick Start
 
-1. Install dependencies:
+### Prerequisites
+- Node.js 16.9.0 or higher
+- npm (comes with Node.js)
+- Discord Bot Token from [Discord Developer Portal](https://discord.com/developers/applications)
+
+### Installation
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/ClickCS-VCBot.git
+   cd ClickCS-VCBot
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Create a `.env` file with your bot token:
+   ```
+   DISCORD_TOKEN=your_bot_token_here
+   ```
+
+## 🛠️ Usage
+
+### Starting the Bot
 ```bash
-npm install discord.js
+npm start
 ```
 
-2. Create a configuration directory:
+### Stopping the Bot
 ```bash
-mkdir config
+npm run stop
 ```
 
-3. Create an `auth.json` file with your Discord bot token:
-```json
-{
-    "token": "your-discord-bot-token-here"
-}
-```
-
-## Configuration
-
-The bot uses a configuration system that stores settings per guild. You can configure:
-
-- Channel access permissions
-- Role assignments
-- Default behaviors
-
-Configuration files are stored in the `config` directory with the format `<guild-id>.json`.
-
-## Usage
-
-1. Run the bot:
+### Checking Status
 ```bash
-node main.js
+npm run status
 ```
 
-2. The bot will automatically:
-   - Join your Discord server
-   - Start managing voice channel events
-   - Create default configurations for new guilds
+## ⚙️ Configuration
 
-## Error Handling
+### File Structure
+```
+config/
+  ├── bot-config.json    # General bot settings
+  └── <guild-id>.json     # Per-guild configurations
+```
 
-The bot includes comprehensive error handling:
+### Configuration Options
+- **Channel Access**: Control which channels are accessible when users are in voice
+- **Role Management**: Automatically assign/remove roles based on voice activity
+- **Server-specific Settings**: Each server can have its own configuration
 
-- Graceful handling of configuration file operations
-- Automatic creation of missing configurations
-- Detailed error logging
-- Safe fallbacks for missing or invalid configurations
+## 🔄 Available Scripts
 
-## Contributing
+| Command | Description |
+|---------|-------------|
+| `npm start` | Start the bot |
+| `npm stop` | Stop the bot |
+| `npm run status` | Check bot status |
+| `npm run build` | Rebuild the bot |
+| `npm run fix` | Fix common issues |
+| `npm run reset` | Reset configuration |
+| `npm run squeak` | Special command (see source) |
+
+## 🐛 Error Handling
+
+- Automatic reconnection with exponential backoff
+- Detailed error logging with Winston
+- Graceful shutdown procedures
+- Safe fallbacks for missing configurations
+
+## 🤝 Contributing
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
@@ -90,6 +112,6 @@ The bot includes comprehensive error handling:
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## License
+## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+ISC © 2023 Lizard and AsianAreAsian

@@ -60,12 +60,12 @@ function createClient() {
  */
 async function initialize() {
     try {
-        // Load configuration
-        await config.load();
-        
-        // Load environment variables
+        // Load environment variables first
         dotenv.config();
         validateEnvironment();
+        
+        // Load configuration after environment variables are loaded
+        await config.load();
         
         // Initialize Discord client
         client = createClient();

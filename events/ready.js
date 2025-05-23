@@ -8,23 +8,27 @@ const client = new Client({
     ]
 });
 
-client.on('ready', () => {
+module.exports = async (client) => {
+    // Wait for client to be fully initialized
+    await new Promise(resolve => {
+        if (client.user) {
+            resolve();
+        } else {
+            client.once('ready', resolve);
+        }
+    });
+
     console.log(`Logged in as ${client.user.tag}!`);
 
     // Update presence
-    client.user.setPresence({
+    await client.user.setPresence({
         activities: [{
-            name: 'Streaming on Twitch',
-            type: ActivityType.Streaming,
-            state: 'https://www.twitch.tv/your_twitch_channel',
-            url: 'https://www.twitch.tv/your_twitch_channel'
+            name: 'on servers',
+            type: ActivityType.Watching
         }],
         status: 'online'
     });
 
     // Log guild count
     console.log(`Serving ${client.guilds.cache.size} servers`);
-});
-
-// Login the client
-client.login(token).catch(console.error);
+};

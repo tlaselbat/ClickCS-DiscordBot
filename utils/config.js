@@ -15,8 +15,7 @@ class Config {
      * Creates a new Config instance
      */
     constructor() {
-        this.config = null;
-        this.defaultConfig = {
+        this.config = {
             bot: {
                 prefix: "!",
                 defaultStatus: "with Discord",
@@ -26,13 +25,6 @@ class Config {
             },
             permissions: {
                 ownerID: ""
-            },
-            channels: {
-                voiceChannel: {
-                    name: "in vc",
-                    color: "#00ff00",
-                    mentionable: true
-                }
             },
             roles: {
                 voiceChannel: {
@@ -69,6 +61,14 @@ class Config {
                 type: "WATCHING"
             }
         };
+        
+        // Load from file if it exists
+        this.load().catch(error => {
+            logger.error('Error loading configuration:', {
+                error: error.message,
+                stack: error.stack
+            });
+        });;
     }
 
     /**
@@ -85,13 +85,21 @@ class Config {
             let configContent;
             try {
                 configContent = await fs.readFile(configPath, 'utf-8');
-                this.config = JSON.parse(configContent);
+                const fileConfig = JSON.parse(configContent);
+                
+                // Merge file config with default config
+                this.config = {
+                    ...this.config,
+                    ...fileConfig,
+                    auth: {
+                        token: process.env.DISCORD_TOKEN || fileConfig.auth?.token
+                    }
+                };
             } catch (error) {
                 // If file doesn't exist, create it with default config
                 if (error.code === 'ENOENT') {
                     logger.warn('Config file not found, creating with default values');
-                    await fs.writeFile(configPath, JSON.stringify(this.defaultConfig, null, 2));
-                    this.config = this.defaultConfig;
+                    await fs.writeFile(configPath, JSON.stringify(this.config, null, 2));
                 } else {
                     throw error;
                 }
@@ -103,9 +111,6 @@ class Config {
             }
             if (!this.config.permissions?.ownerID) {
                 throw new Error('Owner ID is required in configuration');
-            }
-            if (!this.config.auth?.token) {
-                throw new Error('Discord token is required in configuration');
             }
 
             logger.info('Configuration loaded successfully');
