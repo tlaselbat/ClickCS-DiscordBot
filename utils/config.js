@@ -60,6 +60,13 @@ class Config {
                         maxUses: 5
                     }
                 }
+            },
+            auth: {
+                token: process.env.DISCORD_TOKEN
+            },
+            activity: {
+                name: "on servers",
+                type: "WATCHING"
             }
         };
     }
@@ -96,6 +103,9 @@ class Config {
             }
             if (!this.config.permissions?.ownerID) {
                 throw new Error('Owner ID is required in configuration');
+            }
+            if (!this.config.auth?.token) {
+                throw new Error('Discord token is required in configuration');
             }
 
             logger.info('Configuration loaded successfully');
