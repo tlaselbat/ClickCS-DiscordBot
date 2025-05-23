@@ -76,11 +76,63 @@ npm run status
 ### File Structure
 ```
 config/
-  ├── bot-config.json    # General bot settings
-  └── <guild-id>.json     # Per-guild configurations
+  ├── bot-config.json      # General bot settings
+  ├── presence-config.json  # Bot presence and status configuration
+  └── <guild-id>.json      # Per-guild configurations
 ```
 
-### Configuration Options
+### Bot Presence Configuration
+
+Customize your bot's status and activity in `config/presence-config.json`:
+
+```json
+{
+    "status": "online",
+    "activities": [
+        {
+            "name": "on {guilds} servers",
+            "type": "WATCHING"
+        },
+        {
+            "name": "with {users} users",
+            "type": "PLAYING"
+        }
+    ],
+    "statusMessages": [
+        "Serving {guilds} servers with {users} users",
+        "Version {version} | Prefix: {prefix}"
+    ],
+    "updateInterval": 120000,
+    "randomizeStatus": true
+}
+```
+
+#### Available Options:
+
+- **status**: Bot's online status
+  - `online` (green dot)
+  - `idle` (yellow dot)
+  - `dnd` (red dot, Do Not Disturb)
+  - `invisible` (appears offline)
+
+- **activities**: Array of status messages to cycle through
+  - `name`: Status text (supports variables)
+  - `type`: Activity type (`PLAYING`, `WATCHING`, `LISTENING`, `STREAMING`, `COMPETING`)
+  - `url`: Required for `STREAMING` type (Twitch/YouTube URL)
+
+- **statusMessages**: Console log messages (supports same variables as activities)
+
+- **updateInterval**: How often to rotate statuses (in milliseconds)
+
+- **randomizeStatus**: `true` to randomize order, `false` for sequential
+
+#### Dynamic Variables:
+- `{prefix}` - Bot's command prefix
+- `{version}` - Bot's version
+- `{guilds}` - Number of servers
+- `{users}` - Total users across all servers
+
+### Other Configuration Options
 - **Channel Access**: Control which channels are accessible when users are in voice
 - **Role Management**: Automatically assign/remove roles based on voice activity
 - **Server-specific Settings**: Each server can have its own configuration
