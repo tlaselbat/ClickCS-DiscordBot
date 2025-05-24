@@ -37,31 +37,105 @@ function formatStatus(text, client, config = {}) {
 
 // Load presence configuration
 async function loadPresenceConfig() {
+    const configDir = path.join(process.cwd(), 'config');
+    const configPath = path.join(configDir, 'presence-config.json');
+    
     try {
-        const configPath = path.join(process.cwd(), 'config', 'presence-config.json');
-        const data = await fs.readFile(configPath, 'utf8');
-        presenceConfig = { ...defaultPresence, ...JSON.parse(data) };
-        console.log('Loaded presence configuration');
+        // Ensure config directory exists
+        try {
+            await fs.mkdir(configDir, { recursive: true });
+        } catch (mkdirError) {
+            if (mkdirError.code !== 'EEXIST') {
+                throw mkdirError;
+            }
+        }
+        
+        // Check if config file exists
+        try {
+            await fs.access(configPath);
+            console.log('✅ Config file exists, loading...');
+            
+            // Read and parse the config file
+            const configData = await fs.readFile(configPath, 'utf8');
+            presenceConfig = JSON.parse(configData);
+            console.log('✅ Successfully loaded presence config');
+            return true;
+            
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                console.log('ℹ️ Config file not found, creating default...');
+                const defaultConfig = {
+                    status: 'online',
+                    activities: [
+                        { name: 'on {guilds} servers', type: 'WATCHING' },
+                        { name: 'with {users} users', type: 'PLAYING' },
+                        { name: 'v{version}', type: 'PLAYING' },
+                        { name: '{prefix}help', type: 'LISTENING' }
+                    ],
+                    statusMessages: [
+                        'Serving {guilds} servers with {users} users',
+                        'Version {version} | Prefix: {prefix}',
+                        'Type {prefix}help for commands'
+                    ],
+                    updateInterval: 120000,
+                    randomizeStatus: true
+                };
+                
+                await fs.writeFile(configPath, JSON.stringify(defaultConfig, null, 4));
+                console.log('✅ Created default presence config file');
+                presenceConfig = defaultConfig;
+                return true;
+            }
+            throw error;
+        }
+        
+        // The config is already loaded in the try-catch block above
+        // No need to load it again
     } catch (error) {
-        console.warn('Using default presence configuration:', error.message);
+        console.error('❌ Error loading presence configuration:', {
+            message: error.message,
+            stack: error.stack
+        });
+        console.log('⚠️ Falling back to default presence configuration');
+        presenceConfig = { ...defaultPresence }; // Reset to defaults
+        return false;
     }
 }
 
 // Update bot's presence
 async function updatePresence(client, config = {}) {
     try {
-        if (!presenceConfig.activities || presenceConfig.activities.length === 0) return;
+        console.log('🔄 [DEBUG] Attempting to update presence...');
+        console.log('[DEBUG] Current presenceConfig:', JSON.stringify(presenceConfig, null, 2));
         
+        if (!presenceConfig.activities || presenceConfig.activities.length === 0) {
+            console.warn('⚠️ [DEBUG] No activities found in presence config');
+            return;
+        }
+        
+        // Select activity
         let activity = presenceConfig.activities[0];
-        
         if (presenceConfig.randomizeStatus && presenceConfig.activities.length > 1) {
             const randomIndex = Math.floor(Math.random() * presenceConfig.activities.length);
             activity = presenceConfig.activities[randomIndex];
         }
         
+        console.log('📝 Selected activity:', {
+            name: activity.name,
+            type: activity.type
+        });
+        
+        // Format the activity name with dynamic variables
         const formattedName = formatStatus(activity.name, client, config);
         const activityType = activityTypes[activity.type] || ActivityType.Playing;
         
+        console.log('🔄 Setting presence with:', {
+            name: formattedName,
+            type: activity.type,
+            status: presenceConfig.status || 'online'
+        });
+        
+        // Set the presence
         await client.user.setPresence({
             activities: [{
                 name: formattedName,
@@ -71,47 +145,82 @@ async function updatePresence(client, config = {}) {
             status: presenceConfig.status || 'online'
         });
         
+        console.log('✅ Presence updated successfully');
+        
         // Log status message if available
         if (presenceConfig.statusMessages?.length > 0) {
             const statusIndex = presenceConfig.randomizeStatus 
                 ? Math.floor(Math.random() * presenceConfig.statusMessages.length)
                 : 0;
             const statusMessage = formatStatus(presenceConfig.statusMessages[statusIndex], client, config);
-            console.log(statusMessage);
+            console.log('📢 Status message:', statusMessage);
         }
     } catch (error) {
-        console.error('Error updating presence:', error);
+        console.error('❌ Error updating presence:', {
+            message: error.message,
+            stack: error.stack
+        });
     }
 }
 
 module.exports = async (client) => {
-    // Load config directly in the ready event
-    const config = require('../utils/config');
-    // Wait for client to be fully initialized
-    await new Promise(resolve => {
-        if (client.user) {
-            resolve();
-        } else {
-            client.once('ready', resolve);
+    try {
+        console.log('🚀 [DEBUG] Starting ready event handler...');
+        
+        // Load config directly in the ready event
+        console.log('🔧 [DEBUG] Loading config...');
+        const config = require('../utils/config');
+        console.log('[DEBUG] Loaded config:', JSON.stringify(config, null, 2));
+        
+        // Wait for client to be fully initialized
+        console.log('⏳ [DEBUG] Waiting for client to be ready...');
+        await new Promise(resolve => {
+            if (client.user) {
+                console.log('✅ Client is already ready');
+                resolve();
+            } else {
+                console.log('⏳ Waiting for ready event...');
+                client.once('ready', () => {
+                    console.log('✅ Client is now ready');
+                    resolve();
+                });
+            }
+        });
+
+        console.log(`🤖 Logged in as ${client.user.tag}!`);
+        
+        // Load presence configuration
+        console.log('🔄 Loading presence configuration...');
+        const configLoaded = await loadPresenceConfig();
+        
+        if (configLoaded) {
+            console.log('🔄 Updating presence...');
+            try {
+                await updatePresence(client, config);
+                console.log('✅ Presence updated successfully');
+            } catch (updateError) {
+                console.error('❌ Failed to update presence:', updateError);
+            }
+            
+            // Set up periodic updates if interval is configured
+            if (presenceConfig.updateInterval > 0) {
+                console.log(`🔄 Setting up presence updates every ${presenceConfig.updateInterval/1000} seconds`);
+                setInterval(
+                    () => {
+                        console.log('🔄 Updating presence (scheduled)...');
+                        updatePresence(client, config).catch(console.error);
+                    },
+                    presenceConfig.updateInterval
+                );
+            }
         }
-    });
 
-    console.log(`Logged in as ${client.user.tag}!`);
-    
-    // Load presence configuration
-    await loadPresenceConfig();
-    
-    // Initial presence update
-    await updatePresence(client, config);
-    
-    // Set up periodic updates if interval is configured
-    if (presenceConfig.updateInterval > 0) {
-        setInterval(
-            () => updatePresence(client, config),
-            presenceConfig.updateInterval
-        );
+        // Log guild count
+        const guildCount = client.guilds.cache.size;
+        const userCount = client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
+        console.log(`🌐 Serving ${guildCount} servers with ${userCount} users`);
+        
+    } catch (error) {
+        console.error('❌ Error in ready event handler:', error);
     }
-
-    // Log guild count
-    console.log(`Serving ${client.guilds.cache.size} servers with ${client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0)} users`);
 };

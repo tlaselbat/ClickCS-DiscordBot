@@ -33,12 +33,20 @@ function createClient() {
         Discord.GatewayIntentBits.GuildVoiceStates,
         Discord.GatewayIntentBits.GuildMessages,
         Discord.GatewayIntentBits.DirectMessages,
-        Discord.GatewayIntentBits.GuildMembers
+        Discord.GatewayIntentBits.GuildMembers,
+        Discord.GatewayIntentBits.MessageContent
     ];
 
     const clientConfig = {
         intents: intents,
         partials: ['MESSAGE', 'CHANNEL', 'REACTION'],
+        presence: {
+            status: 'online',
+            activities: [{
+                name: 'Starting up...',
+                type: 'PLAYING'
+            }]
+        },
         rest: {
             rateLimit: {
                 timeout: 1000,
