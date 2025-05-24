@@ -16,7 +16,7 @@
 		"fix": "powershell -command Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force; ./scripts/sumtingbork.ps1",
 		"reset": "powershell -command Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force; ./scripts/reducedtoatoms.ps1",
 		"squeanut": "powershell -command Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force; ./scripts/gibSQUEEEEE.ps1",
-	"setup": "node setup.js"
+		"setup": "node setup.js"
 	},
 	"author": "Lizard and AsianAreAsian",
 	"license": "ISC"
