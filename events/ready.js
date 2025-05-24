@@ -184,42 +184,48 @@ async function updatePresence(client, config = {}) {
 
 module.exports = async (client) => {
     try {
-        console.log('🚀 [DEBUG] Starting ready event handler...');
+        console.log('🚀 Starting ready event handler...');
         
-        // Load config directly in the ready event
-        console.log('🔧 [DEBUG] Loading config...');
+        // Load config
+        console.log('🔧 Loading config...');
         let config;
         try {
             config = require('../utils/config');
-            console.log('[DEBUG] Successfully loaded config');
+            console.log('✅ Successfully loaded config');
         } catch (configError) {
             console.error('❌ Error loading config:', configError);
             console.log('⚠️ Using empty config object');
-            config = {}; // Use empty config as fallback
+            config = { bot: {} }; // Ensure config has a bot object with default values
         }
-        
-        // Wait for client to be fully initialized
-        console.log('⏳ [DEBUG] Waiting for client to be ready...');
-        await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                reject(new Error('Timed out waiting for client to be ready'));
-            }, 10000); // 10 second timeout
-            
-            if (client.user) {
-                console.log('✅ Client is already ready');
-                clearTimeout(timeout);
-                resolve();
-            } else {
-                console.log('⏳ Waiting for ready event...');
-                client.once('ready', () => {
-                    console.log('✅ Client is now ready');
-                    clearTimeout(timeout);
-                    resolve();
-                });
-            }
-        });
+
+        // Ensure config has required bot properties
+        config.bot = config.bot || {};
+        config.bot.prefix = config.bot.prefix || '!';
+        config.bot.version = config.bot.version || '1.0.0';
+
+        // Wait for client to be ready if not already
+        if (!client.user) {
+            console.log('⏳ Waiting for client to be ready...');
+            await new Promise((resolve) => {
+                client.once('ready', resolve);
+            });
+        }
 
         console.log(`🤖 Logged in as ${client.user.tag}!`);
+        
+        // Set initial presence immediately
+        try {
+            await client.user.setPresence({
+                activities: [{
+                    name: 'Starting up...',
+                    type: ActivityType.Playing
+                }],
+                status: 'online'
+            });
+            console.log('✅ Set initial presence');
+        } catch (error) {
+            console.error('❌ Failed to set initial presence:', error);
+        }
         
         // Load presence configuration
         console.log('🔄 Loading presence configuration...');
@@ -227,25 +233,23 @@ module.exports = async (client) => {
             const configLoaded = await loadPresenceConfig();
             
             if (configLoaded) {
-                console.log('🔄 Updating presence...');
+                console.log('✅ Presence config loaded successfully');
+                
+                // Update presence with loaded config
                 try {
                     await updatePresence(client, config);
                     console.log('✅ Presence updated successfully');
                 } catch (updateError) {
                     console.error('❌ Failed to update presence:', updateError);
-                    // Try a basic presence update as fallback
-                    try {
-                        await client.user.setPresence({
-                            activities: [{
-                                name: 'Discord Bot',
-                                type: ActivityType.Playing
-                            }],
-                            status: 'online'
-                        });
-                        console.log('✅ Set basic presence as fallback');
-                    } catch (fallbackError) {
-                        console.error('❌ Failed to set fallback presence:', fallbackError);
-                    }
+                    // Fallback to basic presence
+                    await client.user.setPresence({
+                        activities: [{
+                            name: 'Discord Bot',
+                            type: ActivityType.Playing
+                        }],
+                        status: 'online'
+                    });
+                    console.log('✅ Set fallback presence');
                 }
                 
                 // Set up periodic updates if interval is configured
@@ -265,16 +269,38 @@ module.exports = async (client) => {
                 console.warn('⚠️ Using default presence configuration');
                 await updatePresence(client, config);
             }
+        } catch (error) {
+            console.error('❌ Error loading presence config:', error);
+            // Fallback to default presence
+            await client.user.setPresence({
+                activities: [{
+                    name: 'Discord Bot',
+                    type: ActivityType.Playing
+                }],
+                status: 'online'
+            });
+        }
 
         // Log guild count
         const guildCount = client.guilds.cache.size;
         const userCount = client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
         console.log(`🌐 Serving ${guildCount} servers with ${userCount} users`);
-        
-        } catch (error) {
-            console.error('❌ Error in ready event handler:', error);
-        }
+            
     } catch (error) {
-        console.error('❌ Fatal error in ready event handler:', error);
+        console.error('❌ Error in ready event handler:', error);
+        // Try to set a basic presence even if there's an error
+        if (client.user) {
+            try {
+                await client.user.setPresence({
+                    activities: [{
+                        name: 'Error',
+                        type: ActivityType.Playing
+                    }],
+                    status: 'dnd'
+                });
+            } catch (e) {
+                console.error('❌ Failed to set error presence:', e);
+            }
+        }
     }
 };

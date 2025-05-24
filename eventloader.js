@@ -95,7 +95,14 @@ module.exports = async (client) => {
                 loadedEvents.set(eventName, true);
 
                 if (eventName === 'ready') {
-                    await event(client);
+                    // For ready event, use client.once to ensure it only runs once
+                    client.once('ready', async () => {
+                        try {
+                            await event(client);
+                        } catch (error) {
+                            logger.error(`Error in ready event handler: ${error.message}`, { error });
+                        }
+                    });
                 } else {
                     // For other events, pass client as the first parameter
                     client.on(eventName, (...args) => event(client, ...args));
