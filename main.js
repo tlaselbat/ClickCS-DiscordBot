@@ -97,6 +97,28 @@ async function initialize() {
         });
 
         logger.info('Bot successfully logged in');
+        
+        // Set up presence in the ready event
+        client.once('ready', () => {
+            logger.info(`Logged in as ${client.user.tag}`);
+            
+            // Set presence with all required properties
+            client.user.setPresence({
+                status: 'online',
+                afk: false,
+                activities: [{
+                    name: 'with your server',
+                    type: Discord.ActivityType.Playing,
+                    url: 'https://www.twitch.tv/yourchannel' // Optional: Add a URL if needed
+                }]
+            });
+            
+            // Log the presence that was set
+            logger.info('Presence set to:', {
+                status: 'online',
+                activity: 'with your server'
+            });
+        });
 
     } catch (error) {
         logger.error('Initialization error:', {
@@ -128,6 +150,7 @@ function validateEnvironment() {
  * Attempts to login with exponential backoff
  * @param {Discord.Client} client - Discord client instance
  * @param {string} token - Discord bot token
+ * @param maxAttempts
  * @returns {Promise<void>}
  */
 async function loginWithRetry(client, token, maxAttempts = 3) {
