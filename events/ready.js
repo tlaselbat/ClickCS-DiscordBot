@@ -84,7 +84,9 @@ async function updatePresence(client, config = {}) {
     }
 }
 
-module.exports = async (client, config = {}) => {
+module.exports = async (client) => {
+    // Load config directly in the ready event
+    const config = require('../utils/config');
     // Wait for client to be fully initialized
     await new Promise(resolve => {
         if (client.user) {
