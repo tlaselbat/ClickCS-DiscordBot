@@ -106,11 +106,17 @@ async function loadPresenceConfig() {
 async function updatePresence(client, config = {}) {
     try {
         console.log('🔄 [DEBUG] Attempting to update presence...');
+        console.log('[DEBUG] Client user:', client.user ? 'exists' : 'does not exist');
+        
+        if (!client.user) {
+            throw new Error('Client user is not available');
+        }
+        
         console.log('[DEBUG] Current presenceConfig:', JSON.stringify(presenceConfig, null, 2));
         
         if (!presenceConfig.activities || presenceConfig.activities.length === 0) {
-            console.warn('⚠️ [DEBUG] No activities found in presence config');
-            return;
+            console.warn('⚠️ [DEBUG] No activities found in presence config, using default');
+            presenceConfig.activities = defaultPresence.activities;
         }
         
         // Select activity
@@ -122,30 +128,43 @@ async function updatePresence(client, config = {}) {
         
         console.log('📝 Selected activity:', {
             name: activity.name,
-            type: activity.type
+            type: activity.type || 'PLAYING'  // Ensure type has a default
         });
         
         // Format the activity name with dynamic variables
-        const formattedName = formatStatus(activity.name, client, config);
-        const activityType = activityTypes[activity.type] || ActivityType.Playing;
-        
-        console.log('🔄 Setting presence with:', {
-            name: formattedName,
-            type: activity.type,
-            status: presenceConfig.status || 'online'
-        });
-        
-        // Set the presence
-        await client.user.setPresence({
-            activities: [{
+        try {
+            const formattedName = formatStatus(activity.name, client, config);
+            const activityType = activityTypes[activity.type] || ActivityType.Playing;
+            
+            console.log('🔄 Setting presence with:', {
                 name: formattedName,
-                type: activityType,
-                url: activity.url
-            }],
-            status: presenceConfig.status || 'online'
-        });
-        
-        console.log('✅ Presence updated successfully');
+                type: activity.type,
+                status: presenceConfig.status || 'online'
+            });
+            
+            // Set the presence
+            await client.user.setPresence({
+                activities: [{
+                    name: formattedName,
+                    type: activityType,
+                    url: activity.url
+                }],
+                status: presenceConfig.status || 'online'
+            });
+            
+            console.log('✅ Presence updated successfully');
+        } catch (formatError) {
+            console.error('❌ Error formatting status:', formatError);
+            // Fallback to a simple presence if formatting fails
+            await client.user.setPresence({
+                activities: [{
+                    name: 'Discord Bot',
+                    type: ActivityType.Playing
+                }],
+                status: 'online'
+            });
+            console.log('✅ Set fallback presence');
+        }
         
         // Log status message if available
         if (presenceConfig.statusMessages?.length > 0) {
@@ -169,19 +188,32 @@ module.exports = async (client) => {
         
         // Load config directly in the ready event
         console.log('🔧 [DEBUG] Loading config...');
-        const config = require('../utils/config');
-        console.log('[DEBUG] Loaded config:', JSON.stringify(config, null, 2));
+        let config;
+        try {
+            config = require('../utils/config');
+            console.log('[DEBUG] Successfully loaded config');
+        } catch (configError) {
+            console.error('❌ Error loading config:', configError);
+            console.log('⚠️ Using empty config object');
+            config = {}; // Use empty config as fallback
+        }
         
         // Wait for client to be fully initialized
         console.log('⏳ [DEBUG] Waiting for client to be ready...');
-        await new Promise(resolve => {
+        await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                reject(new Error('Timed out waiting for client to be ready'));
+            }, 10000); // 10 second timeout
+            
             if (client.user) {
                 console.log('✅ Client is already ready');
+                clearTimeout(timeout);
                 resolve();
             } else {
                 console.log('⏳ Waiting for ready event...');
                 client.once('ready', () => {
                     console.log('✅ Client is now ready');
+                    clearTimeout(timeout);
                     resolve();
                 });
             }
@@ -191,36 +223,58 @@ module.exports = async (client) => {
         
         // Load presence configuration
         console.log('🔄 Loading presence configuration...');
-        const configLoaded = await loadPresenceConfig();
-        
-        if (configLoaded) {
-            console.log('🔄 Updating presence...');
-            try {
-                await updatePresence(client, config);
-                console.log('✅ Presence updated successfully');
-            } catch (updateError) {
-                console.error('❌ Failed to update presence:', updateError);
-            }
+        try {
+            const configLoaded = await loadPresenceConfig();
             
-            // Set up periodic updates if interval is configured
-            if (presenceConfig.updateInterval > 0) {
-                console.log(`🔄 Setting up presence updates every ${presenceConfig.updateInterval/1000} seconds`);
-                setInterval(
-                    () => {
-                        console.log('🔄 Updating presence (scheduled)...');
-                        updatePresence(client, config).catch(console.error);
-                    },
-                    presenceConfig.updateInterval
-                );
+            if (configLoaded) {
+                console.log('🔄 Updating presence...');
+                try {
+                    await updatePresence(client, config);
+                    console.log('✅ Presence updated successfully');
+                } catch (updateError) {
+                    console.error('❌ Failed to update presence:', updateError);
+                    // Try a basic presence update as fallback
+                    try {
+                        await client.user.setPresence({
+                            activities: [{
+                                name: 'Discord Bot',
+                                type: ActivityType.Playing
+                            }],
+                            status: 'online'
+                        });
+                        console.log('✅ Set basic presence as fallback');
+                    } catch (fallbackError) {
+                        console.error('❌ Failed to set fallback presence:', fallbackError);
+                    }
+                }
+                
+                // Set up periodic updates if interval is configured
+                if (presenceConfig.updateInterval > 0) {
+                    console.log(`🔄 Setting up presence updates every ${presenceConfig.updateInterval/1000} seconds`);
+                    setInterval(
+                        () => {
+                            console.log('🔄 Updating presence (scheduled)...');
+                            updatePresence(client, config).catch(error => {
+                                console.error('❌ Error in scheduled presence update:', error);
+                            });
+                        },
+                        presenceConfig.updateInterval
+                    );
+                }
+            } else {
+                console.warn('⚠️ Using default presence configuration');
+                await updatePresence(client, config);
             }
-        }
 
         // Log guild count
         const guildCount = client.guilds.cache.size;
         const userCount = client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
         console.log(`🌐 Serving ${guildCount} servers with ${userCount} users`);
         
+        } catch (error) {
+            console.error('❌ Error in ready event handler:', error);
+        }
     } catch (error) {
-        console.error('❌ Error in ready event handler:', error);
+        console.error('❌ Fatal error in ready event handler:', error);
     }
 };
