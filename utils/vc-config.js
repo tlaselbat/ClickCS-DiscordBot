@@ -3,9 +3,9 @@
  * @module utils/vc-config
  */
 
-const fs = require('fs').promises;
-const path = require('path');
-const { existsSync, mkdirSync } = require('fs');
+import fs from 'fs/promises';
+import path from 'path';
+import { existsSync, mkdirSync } from 'fs';
 
 /**
  * VC configuration interface
@@ -35,12 +35,21 @@ class VCConfig {
         };
 
         // Ensure config directory exists
-        if (!existsSync(configDir)) {
-            try {
-                mkdirSync(configDir, { recursive: true });
-            } catch (error) {
-                throw new Error(`Failed to create config directory: ${error.message}`);
+        try {
+            // Convert to absolute path and normalize
+            const absolutePath = path.isAbsolute(configDir) 
+                ? path.normalize(configDir) 
+                : path.resolve(process.cwd(), configDir);
+                
+            // Create directory if it doesn't exist
+            if (!existsSync(absolutePath)) {
+                mkdirSync(absolutePath, { recursive: true });
             }
+            
+            // Store the absolute path
+            this.configDir = absolutePath;
+        } catch (error) {
+            throw new Error(`Failed to initialize config directory: ${error.message}`);
         }
     }
 
@@ -125,4 +134,4 @@ class VCConfig {
     }
 }
 
-module.exports = VCConfig;
+export default VCConfig;

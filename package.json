@@ -2,21 +2,15 @@
 	"name": "nutbot",
 	"version": "2.1.1",
 	"description": "discord bot",
+	"type": "module",
 	"main": "main.js",
 	"dependencies": {
 		"discord.js": "^14.14.1",
-		"dotenv": "^16.5.0",
-		"winston": "^3.11.0"
+		"dotenv": "^16.5.0"
 	},
 	"scripts": {
-		"start": "powershell -command Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force; ./scripts/startNOW.ps1",
-		"stop": "powershell -command Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force; ./scripts/stahpplease.ps1",
-		"status": "pm2 status main",
-		"build": "powershell -command Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force; ./scripts/WECANBUILDIT.ps1",
-		"fix": "powershell -command Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force; ./scripts/sumtingbork.ps1",
-		"reset": "powershell -command Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force; ./scripts/reducedtoatoms.ps1",
-		"squeanut": "powershell -command Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force; ./scripts/gibSQUEEEEE.ps1",
-		"setup": "node setup.js"
+		"start": "node main.js",
+		"setup": "node setup.mjs"
 	},
 	"author": "Lizard and AsianAreAsian",
 	"license": "ISC"
