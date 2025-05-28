@@ -15,7 +15,7 @@ const __dirname = path.dirname(__filename);
 const DEFAULT_CONFIG = {
     roles: {
         voiceChannel: {
-            name: 'in vc',
+            name: 'vc_',
             enabled: true,
             autoRemove: true
         }

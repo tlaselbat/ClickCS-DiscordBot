@@ -19,7 +19,10 @@ async function ensureConfigDir() {
     }
 }
 
-// Default configurations
+/**
+ * Default bot configuration
+ * This is the base configuration that will be used if no config file exists
+ */
 const defaultConfigs = {
     'bot-config.json': {
         bot: {
@@ -36,7 +39,7 @@ const defaultConfigs = {
         },
         roles: {
             voiceChannel: {
-                name: 'in vc',
+                name: 'vc_',
                 color: '#00ff00',
                 mentionable: true,
                 enabled: true,
@@ -216,22 +219,82 @@ LOG_LEVEL=info
     }
 }
 
+/**
+ * Validates the bot configuration
+ * @param {Object} config - The configuration object to validate
+ * @returns {Array<string>} Array of validation errors, empty if valid
+ */
 async function validateConfig(config) {
     const requiredFields = {
+        // Bot configuration
         'bot.prefix': 'string',
+        'bot.version': 'string',
+        'bot.maxRetries': 'number',
+        'bot.retryDelay': 'number',
+        'bot.presenceUpdateInterval': 'number',
+        
+        // Permissions
         'permissions.ownerID': 'string',
-        'roles.voiceChannel.name': 'string'
+        'permissions.adminRoles': 'object',
+        'permissions.moderatorRoles': 'object',
+        
+        // Voice channel role settings
+        'roles.voiceChannel.name': 'string',
+        'roles.voiceChannel.color': 'string',
+        'roles.voiceChannel.mentionable': 'boolean',
+        'roles.voiceChannel.enabled': 'boolean',
+        'roles.voiceChannel.autoRemove': 'boolean',
+        
+        // Event configurations
+        'events.voiceStateUpdate.enabled': 'boolean',
+        'events.voiceStateUpdate.debug': 'boolean',
+        'events.voiceStateUpdate.autoManageRoles': 'boolean',
+        
+        // Logging
+        'logging.level': 'string',
+        'logging.file.enabled': 'boolean',
+        'logging.file.maxSize': 'string',
+        'logging.file.maxFiles': 'number',
+        'logging.file.directory': 'string',
+        'logging.console.enabled': 'boolean',
+        'logging.console.timestamp': 'boolean',
+        
+        // Database
+        'database.enabled': 'boolean',
+        'database.type': 'string',
+        'database.path': 'string',
+        'database.backup.enabled': 'boolean',
+        'database.backup.interval': 'string',
+        'database.backup.keepLast': 'number'
     };
 
     const errors = [];
     
-    for (const [path, type] of Object.entries(requiredFields)) {
+    // Check required fields
+    for (const [path, expectedType] of Object.entries(requiredFields)) {
         const value = path.split('.').reduce((obj, key) => obj && obj[key], config);
         
         if (value === undefined || value === null) {
             errors.push(`Missing required field: ${path}`);
-        } else if (typeof value !== type) {
-            errors.push(`Invalid type for ${path}: expected ${type}, got ${typeof value}`);
+        } else if (typeof value !== expectedType) {
+            errors.push(`Invalid type for ${path}: expected ${expectedType}, got ${typeof value}`);
+        }
+    }
+    
+    // Additional validation for specific fields
+    if (config.bot) {
+        if (config.bot.prefix.length === 0 || config.bot.prefix.length > 5) {
+            errors.push('bot.prefix must be between 1 and 5 characters');
+        }
+        
+        if (config.bot.retryDelay < 1000) {
+            errors.push('bot.retryDelay must be at least 1000ms');
+        }
+    }
+    
+    if (config.database?.enabled) {
+        if (!['sqlite', 'postgres', 'mysql'].includes(config.database.type)) {
+            errors.push('database.type must be one of: sqlite, postgres, mysql');
         }
     }
     

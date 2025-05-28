@@ -28,7 +28,7 @@ class Config {
             },
             roles: {
                 voiceChannel: {
-                    name: "in vc",
+                    name: 'vc',
                     color: "#00ff00",
                     mentionable: true
                 }

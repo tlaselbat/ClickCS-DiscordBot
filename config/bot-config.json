@@ -3,37 +3,67 @@
         "prefix": "!",
         "version": "1.0.0",
         "maxRetries": 3,
-        "retryDelay": 2000
+        "retryDelay": 2000,
+        "presenceUpdateInterval": 120000
     },
     "permissions": {
-        "ownerID": "1270007253000261633"
+        "ownerID": "YOUR_USER_ID_HERE",
+        "adminRoles": [],
+        "moderatorRoles": []
     },
     "roles": {
         "voiceChannel": {
-            "name": "in vc",
+            "name": "vc",
             "color": "#00ff00",
             "mentionable": true,
             "enabled": true,
-            "autoRemove": true
+            "autoRemove": true,
+            "blacklist": {
+                "enabled": false,
+                "adminBlacklisted": true,
+                "users": []
+            }
         }
     },
     "events": {
         "voiceStateUpdate": {
             "enabled": true,
-            "debug": true,
+            "debug": false,
             "autoManageRoles": true
+        },
+        "messageCreate": {
+            "enabled": true,
+            "commandPrefix": "!",
+            "ignoreBots": true
+        },
+        "guildMemberAdd": {
+            "enabled": true,
+            "welcomeMessage": "Welcome {member} to {server}!",
+            "assignDefaultRole": false,
+            "defaultRoleId": ""
         }
     },
     "logging": {
         "level": "info",
         "file": {
             "maxSize": "5MB",
-            "maxFiles": 5
+            "maxFiles": 5,
+            "enabled": true,
+            "directory": "./logs"
+        },
+        "console": {
+            "enabled": true,
+            "timestamp": true
         }
     },
     "database": {
         "enabled": false,
         "type": "sqlite",
-        "path": "./data/bot.db"
+        "path": "./data/bot.db",
+        "backup": {
+            "enabled": true,
+            "interval": "1d",
+            "keepLast": 7
+        }
     }
 }
