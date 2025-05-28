@@ -1,17 +1,65 @@
 {
-	"name": "nutbot",
-	"version": "2.1.1",
-	"description": "discord bot",
-	"type": "module",
-	"main": "main.js",
-	"dependencies": {
-		"discord.js": "^14.14.1",
-		"dotenv": "^16.5.0"
-	},
-	"scripts": {
-		"start": "node main.js",
-		"setup": "node setup.mjs"
-	},
-	"author": "Lizard and AsianAreAsian",
-	"license": "ISC"
+  "name": "clickcs-discordbot",
+  "version": "3.0.0",
+  "description": "Discord bot for managing voice channel roles and permissions",
+  "type": "module",
+  "main": "src/main.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node src/main.js",
+    "dev": "NODE_ENV=development node --watch src/main.js",
+    "test": "jest --coverage",
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\"",
+    "prepare": "husky install",
+    "setup": "node setup.mjs",
+    "docker:build": "docker build -t clickcs-discordbot .",
+    "docker:run": "docker run --env-file .env -d clickcs-discordbot"
+  },
+  "dependencies": {
+    "@sapphire/ratelimits": "^3.6.7",
+    "ajv": "^8.12.0",
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.5.0",
+    "express": "^4.18.2",
+    "joi": "^17.11.0",
+    "pino": "^8.18.0",
+    "pino-pretty": "^10.2.3",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.23.5",
+    "@babel/preset-env": "^7.23.5",
+    "@types/jest": "^29.5.10",
+    "@types/node": "^20.10.5",
+    "eslint": "^8.55.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.0",
+    "eslint-plugin-jest": "^27.6.0",
+    "eslint-plugin-jsdoc": "^46.9.1",
+    "eslint-plugin-prettier": "^5.0.1",
+    "husky": "^8.0.3",
+    "jest": "^29.7.0",
+    "prettier": "^3.1.1",
+    "supertest": "^6.3.3",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.3.2"
+  },
+  "author": "ClickCS Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/ClickCS-DiscordBot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/ClickCS-DiscordBot/issues"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "voice",
+    "automation"
+  ]
 }
