@@ -1,19 +1,53 @@
+/**
+ * @file ready.js - Handles Discord bot's ready event and manages presence configuration
+ * @module events/ready
+ * @requires discord.js
+ * @requires fs
+ * @requires path
+ * @requires config-validator
+ */
+
+/**
+ * @file ready.js - Handles the Discord bot's ready event and presence management
+ * @module events/ready
+ * @requires discord.js
+ * @requires fs
+ * @requires path
+ * @requires url
+ * @requires ../utils/config-validator
+ */
+
 import { ActivityType } from 'discord.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { validatePresenceConfig } from '../utils/config-validator.js';
 
-// Get directory name in ES module
+/*
+ * Initialize module paths for ES module compatibility
+ */
+/** @type {string} The absolute path of the current file */
 const __filename = fileURLToPath(import.meta.url);
+/** @type {string} The absolute path of the current directory */
 const __dirname = path.dirname(__filename);
 
-// Debug logging helper
+/**
+ * Debug logging helper function
+ * @param {...any} args - Arguments to log
+ */
 const debug = (...args) => {
     console.log(`[READY_DEBUG][${new Date().toISOString()}]`, ...args);
 };
 
-// Default presence configuration
+/**
+ * Default presence configuration for the bot
+ * @type {Object}
+ * @property {string} status - The bot's status (online, idle, etc.)
+ * @property {Array<Object>} activities - Array of activity configurations
+ * @property {Array<string>} statusMessages - Array of status message templates
+ * @property {number} updateInterval - Interval in milliseconds between presence updates
+ * @property {boolean} randomizeStatus - Whether to randomize status messages
+ */
 const defaultPresence = {
     status: 'online',
     activities: [{
@@ -30,11 +64,22 @@ const defaultPresence = {
     randomizeStatus: true
 };
 
-// Cache for presence configuration
+/**
+ * Cached presence configuration
+ * @type {Object}
+ */
 let presenceConfig = { ...defaultPresence };
+
+/**
+ * Timer for presence updates
+ * @type {NodeJS.Timeout|null}
+ */
 let presenceUpdateInterval = null;
 
-// Activity type mapping
+/**
+ * Mapping of activity type strings to Discord.js ActivityType constants
+ * @type {Object<string, ActivityType>}
+ */
 const activityTypes = {
     'PLAYING': ActivityType.Playing,
     'STREAMING': ActivityType.Streaming,
@@ -43,7 +88,13 @@ const activityTypes = {
     'COMPETING': ActivityType.Competing
 };
 
-// Format status text with variables
+/**
+ * Formats status text by replacing template variables with actual values
+ * @param {string} text - The template string to format
+ * @param {Client} client - The Discord.js client instance
+ * @param {Object} [config={}] - Optional configuration object
+ * @returns {string} The formatted status text
+ */
 function formatStatus(text, client, config = {}) {
     if (!text || !client) return text || '';
     
@@ -62,7 +113,10 @@ function formatStatus(text, client, config = {}) {
     }
 }
 
-// Load presence configuration
+/**
+ * Loads and validates the presence configuration from file
+ * @returns {Promise<boolean>} True if config was loaded successfully, false otherwise
+ */
 async function loadPresenceConfig() {
     const configPath = path.join(__dirname, '..', 'config', 'presence-config.json');
     
@@ -114,7 +168,12 @@ async function loadPresenceConfig() {
     }
 }
 
-// Update bot's presence
+/**
+ * Updates the bot's presence with configured activity and status
+ * @param {Client} client - The Discord.js client instance
+ * @param {Object} [config={}] - Optional configuration object
+ * @returns {Promise<boolean>} True if presence was updated successfully, false otherwise
+ */
 async function updatePresence(client, config = {}) {
     try {
         debug('Starting presence update...');
@@ -185,9 +244,21 @@ async function updatePresence(client, config = {}) {
     }
 }
 
-// Handle ready event
+/**
+ * Handles the Discord bot's ready event
+ * @param {Client} client - The Discord.js client instance
+ * @returns {Promise<void>}
+ */
 export default async function handleReady(client) {
-    // Helper function to set basic presence
+    /**
+     * Helper function to set basic presence
+     * @param {string} [status='online'] - The bot's status
+     * @param {Object} [activity={}] - Activity configuration
+     * @param {string} activity.name - Activity name
+     * @param {ActivityType} activity.type - Activity type
+     * @param {string} [activity.url] - Activity URL (for streaming)
+     * @returns {Promise<boolean>} True if presence was set successfully, false otherwise
+     */
     const setBasicPresence = async (status = 'online', activity = { name: 'Starting...', type: ActivityType.Playing }) => {
         if (!client?.user) return false;
         try {

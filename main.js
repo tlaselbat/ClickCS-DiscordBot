@@ -83,6 +83,18 @@ const DEFAULT_CONFIG = {
  */
 let discordClient;
 
+// Load bot configuration
+let botConfig;
+try {
+    const configPath = path.join(__dirname, 'config', 'bot-config.json');
+    const configData = await fs.readFile(configPath, 'utf8');
+    botConfig = JSON.parse(configData);
+    console.log('✅ Bot configuration loaded successfully');
+} catch (error) {
+    console.error('❌ Failed to load bot configuration:', error);
+    process.exit(1);
+}
+
 /**
  * Creates and configures a new Discord client instance
  * @returns {Promise<Discord.Client>} Configured Discord client
@@ -91,6 +103,11 @@ let discordClient;
 async function createDiscordClient() {
     try {
         const client = await createConfiguredClient();
+        // Attach config to client for easy access
+        client.config = {
+            botConfig,
+            getVCConfig: (guildId) => configManager.getVCConfig(guildId)
+        };
         setupClientEvents(client);
         return client;
     } catch (error) {
@@ -207,6 +224,14 @@ function setupClientEvents(client) {
         console.error('Error in ready handler:', error);
     }));
 
+    // Import and set up voice state update handler
+    import('./events/voiceStateUpdate.js').then(({ default: handleVoiceStateUpdate, name: eventName }) => {
+        client.on(eventName, handleVoiceStateUpdate);
+        console.log(`✅ Registered ${eventName} event handler`);
+    }).catch(error => {
+        console.error('Failed to load voice state update handler:', error);
+    });
+
     // Error handling
     client.on('error', (error) => {
         console.error('Client error', error);
@@ -278,6 +303,26 @@ async function initialize() {
         
         // Initialize Discord client
         discordClient = await createDiscordClient();
+        
+        // Load bot configuration
+        const configPath = path.join(__dirname, 'config', 'bot-config.json');
+        let botConfig = {};
+        try {
+            const configData = await fs.readFile(configPath, 'utf8');
+            botConfig = JSON.parse(configData);
+        } catch (error) {
+            console.warn('❌ Failed to load bot config, using defaults:', error.message);
+        }
+
+        // Initialize event handlers with config
+        try {
+            const eventLoader = (await import('./eventloader.js')).default;
+            await eventLoader(discordClient, botConfig);
+            console.log('✅ Event handlers initialized');
+        } catch (error) {
+            console.error('❌ Failed to initialize event handlers:', error);
+            throw error;
+        }
         
         // Start bot
         await startBot();

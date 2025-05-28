@@ -26,29 +26,63 @@ const defaultConfigs = {
             prefix: '!',
             version: '1.0.0',
             maxRetries: 3,
-            retryDelay: 2000
+            retryDelay: 2000,
+            presenceUpdateInterval: 120000
         },
         permissions: {
-            ownerID: 'YOUR_USER_ID_HERE'
+            ownerID: 'YOUR_USER_ID_HERE',
+            adminRoles: [],
+            moderatorRoles: []
         },
         roles: {
             voiceChannel: {
                 name: 'in vc',
                 color: '#00ff00',
-                mentionable: true
+                mentionable: true,
+                enabled: true,
+                autoRemove: true
+            }
+        },
+        events: {
+            voiceStateUpdate: {
+                enabled: true,
+                debug: false,
+                autoManageRoles: true
+            },
+            messageCreate: {
+                enabled: true,
+                commandPrefix: '!',
+                ignoreBots: true
+            },
+            guildMemberAdd: {
+                enabled: true,
+                welcomeMessage: 'Welcome {member} to {server}!',
+                assignDefaultRole: false,
+                defaultRoleId: ''
             }
         },
         logging: {
             level: 'info',
             file: {
+                enabled: true,
                 maxSize: '5MB',
-                maxFiles: 5
+                maxFiles: 5,
+                directory: './logs'
+            },
+            console: {
+                enabled: true,
+                timestamp: true
             }
         },
         database: {
             enabled: false,
             type: 'sqlite',
-            path: './data/bot.db'
+            path: './data/bot.db',
+            backup: {
+                enabled: true,
+                interval: '1d',
+                keepLast: 7
+            }
         }
     },
     'presence-config.json': {
@@ -86,6 +120,31 @@ const defaultConfigs = {
     }
 };
 
+// Deep merge objects
+function deepMerge(target, source) {
+    const output = { ...target };
+    
+    if (isObject(target) && isObject(source)) {
+        Object.keys(source).forEach(key => {
+            if (isObject(source[key])) {
+                if (!(key in target)) {
+                    Object.assign(output, { [key]: source[key] });
+                } else {
+                    output[key] = deepMerge(target[key], source[key]);
+                }
+            } else {
+                Object.assign(output, { [key]: source[key] });
+            }
+        });
+    }
+    
+    return output;
+}
+
+function isObject(item) {
+    return item && typeof item === 'object' && !Array.isArray(item);
+}
+
 async function createConfigFile(configDir, filename, content) {
     const filePath = path.join(configDir, filename);
     
@@ -93,17 +152,37 @@ async function createConfigFile(configDir, filename, content) {
         // Check if file already exists
         try {
             await fs.access(filePath);
-            console.log(`⚠️  ${filename} already exists, skipping...`);
-            return false;
-        } catch {
-            // File doesn't exist, create it
-            await fs.writeFile(
-                filePath,
-                JSON.stringify(content, null, 4),
-                'utf8'
-            );
-            console.log(`✅ Created ${filename}`);
+            const currentContent = await fs.readFile(filePath, 'utf8');
+            const currentConfig = JSON.parse(currentContent);
+            
+            // Deep merge with existing config to preserve user settings
+            const mergedConfig = deepMerge(currentConfig, content);
+            
+            // Only write if there are changes
+            if (JSON.stringify(mergedConfig) !== currentContent) {
+                await fs.writeFile(
+                    filePath,
+                    JSON.stringify(mergedConfig, null, 4) + '\n',
+                    'utf8'
+                );
+                console.log(`🔄 Updated ${filename} with new settings`);
+            } else {
+                console.log(`ℹ️  ${filename} is up to date`);
+            }
             return true;
+        } catch (error) {
+            if (error.code === 'ENOENT' || error instanceof SyntaxError) {
+                // File doesn't exist or is invalid JSON, create/overwrite it
+                await fs.mkdir(path.dirname(filePath), { recursive: true });
+                await fs.writeFile(
+                    filePath,
+                    JSON.stringify(content, null, 4) + '\n',
+                    'utf8'
+                );
+                console.log(`✅ Created ${filename}`);
+                return true;
+            }
+            throw error;
         }
     } catch (error) {
         console.error(`❌ Failed to create ${filename}:`, error);
@@ -137,6 +216,28 @@ LOG_LEVEL=info
     }
 }
 
+async function validateConfig(config) {
+    const requiredFields = {
+        'bot.prefix': 'string',
+        'permissions.ownerID': 'string',
+        'roles.voiceChannel.name': 'string'
+    };
+
+    const errors = [];
+    
+    for (const [path, type] of Object.entries(requiredFields)) {
+        const value = path.split('.').reduce((obj, key) => obj && obj[key], config);
+        
+        if (value === undefined || value === null) {
+            errors.push(`Missing required field: ${path}`);
+        } else if (typeof value !== type) {
+            errors.push(`Invalid type for ${path}: expected ${type}, got ${typeof value}`);
+        }
+    }
+    
+    return errors;
+}
+
 async function main() {
     console.log('🚀 Setting up bot configuration...\n');
     
@@ -150,11 +251,27 @@ async function main() {
     // Create .env file
     await createEnvFile();
     
+    // Validate the created/updated config
+    const configPath = path.join(configDir, 'bot-config.json');
+    const configContent = await fs.readFile(configPath, 'utf8');
+    const config = JSON.parse(configContent);
+    
+    const errors = await validateConfig(config);
+    if (errors.length > 0) {
+        console.warn('\n⚠️  Configuration validation warnings:');
+        errors.forEach(error => console.warn(`  - ${error}`));
+    }
+    
     console.log('\n✨ Setup complete!');
-    console.log('📝 Next steps:');
+    console.log('\n📝 Next steps:');
     console.log('1. Edit the .env file with your Discord bot token');
-    console.log('2. Review the configuration files in the config/ directory');
-    console.log('3. Run `npm start` to start the bot\n');
+    console.log('2. Update the ownerID in config/bot-config.json with your Discord user ID');
+    console.log('3. Review the configuration files in the config/ directory');
+    console.log('4. Run `npm start` to start the bot\n');
+    
+    if (errors.length > 0) {
+        process.exit(1);
+    }
 }
 
 main().catch(console.error);

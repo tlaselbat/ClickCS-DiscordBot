@@ -6,13 +6,22 @@
         "retryDelay": 2000
     },
     "permissions": {
-        "ownerID": "YOUR_USER_ID_HERE"
+        "ownerID": "1270007253000261633"
     },
     "roles": {
         "voiceChannel": {
             "name": "in vc",
             "color": "#00ff00",
-            "mentionable": true
+            "mentionable": true,
+            "enabled": true,
+            "autoRemove": true
+        }
+    },
+    "events": {
+        "voiceStateUpdate": {
+            "enabled": true,
+            "debug": true,
+            "autoManageRoles": true
         }
     },
     "logging": {
