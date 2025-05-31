@@ -1,0 +1,26 @@
+{
+  "server": {
+    "id": "663541220437655613",
+    "name": "Default Guild",
+    "prefix": "!"
+  },
+  "modules": {
+    "moderation": true,
+    "music": true,
+    "utility": true
+  },
+  "channels": {
+    "log": "",
+    "welcome": "",
+    "rules": ""
+  },
+  "roles": {
+    "admin": "",
+    "mod": "",
+    "muted": ""
+  },
+  "messages": {
+    "welcome": "Welcome to our server, {user}!",
+    "goodbye": "Goodbye, {user}!"
+  }
+}

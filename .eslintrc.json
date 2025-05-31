@@ -1,0 +1,118 @@
+{
+  "env": {
+    "node": true,
+    "es2022": true,
+    "jest": true,
+    "browser": false
+  },
+  "extends": [
+    "eslint:recommended",
+    "plugin:import/recommended",
+    "plugin:import/errors",
+    "plugin:import/warnings",
+    "plugin:jsdoc/recommended",
+    "plugin:prettier/recommended"
+  ],
+  "parser": "@babel/eslint-parser",
+  "parserOptions": {
+    "ecmaVersion": "latest",
+    "sourceType": "module",
+    "requireConfigFile": false,
+    "ecmaFeatures": {
+      "jsx": false
+    },
+    "babelOptions": {
+      "presets": ["@babel/preset-env"]
+    }
+  },
+  "plugins": ["import", "jsdoc", "prettier", "node"],
+  "rules": {
+    "prettier/prettier": ["error", {}, { "usePrettierrc": true }],
+    "no-console": ["warn", { "allow": ["warn", "error", "info", "debug"] }],
+    "no-unused-vars": ["error", { 
+      "argsIgnorePattern": "^_",
+      "varsIgnorePattern": "^_"
+    }],
+    "import/order": ["error", {
+      "groups": [
+        "builtin",
+        "external",
+        "internal",
+        "parent",
+        "sibling",
+        "index",
+        "object",
+        "type"
+      ],
+      "newlines-between": "always",
+      "alphabetize": { "order": "asc", "caseInsensitive": true }
+    }],
+    "import/extensions": ["error", "ignorePackages", {
+      "js": "never",
+      "mjs": "never",
+      "jsx": "never"
+    }],
+    "jsdoc/require-param-description": "off",
+    "jsdoc/require-returns-description": "off",
+    "jsdoc/require-jsdoc": [
+      "warn",
+      {
+        "require": {
+          "FunctionDeclaration": true,
+          "MethodDefinition": true,
+          "ClassDeclaration": true,
+          "ArrowFunctionExpression": true,
+          "FunctionExpression": true
+        },
+        "contexts": [
+          "ClassProperty",
+          "TSPropertySignature",
+          "TSTypeReference",
+          "TSTypeAliasDeclaration"
+        ]
+      }
+    ],
+    "node/no-unsupported-features/es-syntax": [
+      "error",
+      { "version": ">=18.0.0", "ignores": ["modules"] }
+    ],
+    "node/no-missing-import": ["error", {
+      "allowModules": [],
+      "resolvePaths": ["./src"],
+      "tryExtensions": [".js", ".json", ".node"]
+    }]
+  },
+  "settings": {
+    "import/resolver": {
+      "node": {
+        "extensions": [".js", ".mjs", ".json"],
+        "moduleDirectory": ["node_modules", "src/"]
+      },
+      "babel-module": {}
+    },
+    "jsdoc": {
+      "tagNamePreference": {
+        "returns": "return",
+        "prop": "property",
+        "arg": "param",
+        "constructor": "class",
+        "virtual": "abstract"
+      },
+      "mode": "typescript"
+    },
+    "import/parsers": {
+      "@babel/eslint-parser": [".js", ".jsx"]
+    }
+  },
+  "overrides": [
+    {
+      "files": ["**/__tests__/**/*.js", "**/*.test.js"],
+      "env": {
+        "jest": true
+      },
+      "rules": {
+        "no-unused-expressions": "off"
+      }
+    }
+  ]
+}

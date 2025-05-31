@@ -1,21 +1,21 @@
 {
-    "status": "online",
+    "status": "dnd",
     "activities": [
         {
             "name": "on {guilds} servers",
-            "type": "WATCHING"
+            "type": 3
         },
         {
             "name": "with {users} users",
-            "type": "PLAYING"
+            "type": 0
         },
         {
             "name": "v{version}",
-            "type": "PLAYING"
+            "type": 0
         },
         {
             "name": "{prefix}help",
-            "type": "LISTENING"
+            "type": 2
         }
     ],
     "statusMessages": [
