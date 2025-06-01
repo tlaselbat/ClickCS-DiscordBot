@@ -16,6 +16,7 @@ const dotenv = require('dotenv');
 const logger = require('./src/utils/logger');
 const { config } = require('./src/utils/config');
 const VCConfig = require('./src/utils/vc-config');
+const commandHandler = require('./src/handlers/commandHandler');
 
 // Log unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
@@ -41,7 +42,7 @@ dotenv.config();
 // Global application state
 const appState = {
     client: null,
-    commands: new Collection(),
+    commands: commandHandler, // Use the command handler
     vcConfig: null,
     shuttingDown: false
 };
@@ -354,7 +355,8 @@ function createClient() {
         throw new Error('No Discord token found. Please set the DISCORD_TOKEN environment variable.');
     }
     
-    return new Client({
+    // Create the client
+    const client = new Client({
         intents: [
             GatewayIntentBits.Guilds,
             GatewayIntentBits.GuildMessages,
@@ -370,6 +372,11 @@ function createClient() {
             timeout: 30000
         }
     });
+
+    // Attach config to the client
+    client.config = config;
+    
+    return client;
 }
 
 /**
@@ -438,9 +445,15 @@ async function main() {
         console.log('\n🤖 STEP 2: Creating Discord client...');
         let client;
         try {
+            // Create client with config
             client = createClient();
+            
+            // Set the client on the command handler
+            commandHandler.setClient(client);
+            // Attach config to client
+            client.config = config;
             appState.client = client;
-            console.log('✅ Discord client created');
+            console.log('✅ Discord client created with config attached');
         } catch (err) {
             console.error('❌ Failed to create Discord client:', err);
             throw err;
@@ -456,25 +469,25 @@ async function main() {
             throw err;
         }
         
-        // Load commands
+                        // Load commands using the command handler
         console.log('\n📦 STEP 4: Loading commands...');
         try {
-            await loadCommands();
-            console.log('✅ Commands loaded');
+            await commandHandler.loadCommands();
+            console.log(`✅ ${commandHandler.commands.size} commands loaded`);
+            
+            // Log loaded commands for debugging
+            console.log('\n📋 Loaded commands:');
+            commandHandler.commands.forEach((cmd, name) => {
+                console.log(`   - ${name} (${cmd.data?.description || 'No description'})`);
+            });
+            
         } catch (err) {
             console.error('❌ Failed to load commands:', err);
             throw err;
         }
         
-        // Register commands with Discord
-        console.log('\n📝 STEP 5: Registering application commands...');
-        try {
-            await registerCommands();
-            console.log('✅ Commands registered');
-        } catch (err) {
-            console.error('❌ Failed to register commands:', err);
-            throw err;
-        }
+        // Note: Command registration is now handled by deploy-commands.js
+        console.log('\nℹ️  Use `npm run deploy` to register/update slash commands with Discord');
         
         // Load event handlers
         console.log('\n🎭 STEP 6: Loading event handlers...');

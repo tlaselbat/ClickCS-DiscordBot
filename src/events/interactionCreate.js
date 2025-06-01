@@ -9,7 +9,7 @@ const {
   ComponentType
 } = require('discord.js');
 const logger = require('../utils/logger');
-const { commandHandler } = require('../handlers/commandHandlerV2');
+const commandHandler = require('../handlers/commandHandler');
 const { handleError } = require('../utils/errorUtils');
 const { createEmbed, createButton, createActionRow } = require('../utils/embedUtils');
 const { isDev, env } = require('../utils/env');

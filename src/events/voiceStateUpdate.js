@@ -1,5 +1,5 @@
 const { Events } = require('discord.js');
-const { voiceRoleManager } = require('../services/voiceRoleManager');
+const voiceRoleManager = require('../services/voiceRoleManager');
 const logger = require('../utils/logger');
 
 /**
@@ -126,54 +126,47 @@ async function handleVoiceJoin(member, channel) {
     
     logger.debug(`[DEBUG] Bot has all required channel permissions`);
     
-    // Ensure voiceRoleManager is initialized
-    if (!voiceRoleManager.initialized) {
-      logger.debug('[DEBUG] VoiceRoleManager not initialized, initializing...');
-      await voiceRoleManager.initialize();
+    // Log current channel role mapping for debugging
+    const guildConfig = await voiceRoleManager.getGuildConfig(member.guild.id);
+    const channelRoleId = guildConfig?.channelRoles?.[channel.id];
+    logger.debug(`[DEBUG] Channel ${channel.id} is mapped to role ID: ${channelRoleId || 'none'}`);
+    
+    // Log current config for debugging
+    logger.debug('[DEBUG] VoiceRoleManager guild config:', {
+      enabled: guildConfig?.enabled,
+      channelRoles: guildConfig?.channelRoles || {}
+    });
+    
+    // Check if voice roles are enabled for this guild
+    if (!guildConfig?.enabled) {
+      logger.debug(`[DEBUG] Voice roles are disabled for guild ${member.guild.id}`);
+      return;
     }
-
-    // Add voice role to the member
-    logger.debug(`[DEBUG] Attempting to add voice role to user ${member.user.tag} in channel ${channel.id}`);
+    
+    // Check if this channel has a role mapping
+    if (!channelRoleId) {
+      logger.debug(`[DEBUG] No role mapping found for channel ${channel.id} in guild ${member.guild.id}`);
+      return;
+    }
+    
     try {
-      // Log the current channel role mapping for debugging
-      const channelRoleId = voiceRoleManager.config?.channelRoles?.[channel.id];
-      logger.debug(`[DEBUG] Channel ${channel.id} is mapped to role ID: ${channelRoleId || 'none'}`);
-      
-      // Log current config for debugging
-      logger.debug('[DEBUG] VoiceRoleManager config:', {
-        enabled: voiceRoleManager.config?.enabled,
-        channelRoles: voiceRoleManager.config?.channelRoles || {}
-      });
-      
+      // Add voice role to the member
       const success = await voiceRoleManager.addVoiceRole(member);
       
       if (success) {
         logger.info(`[SUCCESS] Added voice role to user ${member.user.tag} in guild ${member.guild.name}`);
         
-        // Verify the role was added
-        await member.fetch(true); // Refresh member data
-        const roleId = voiceRoleManager.config?.channelRoles?.[channel.id];
-        const hasRole = roleId ? member.roles.cache.has(roleId) : false;
-        
-        // Log all roles the member has for debugging
-        const memberRoles = member.roles.cache.map(r => `${r.name} (${r.id})`).join(', ');
-        logger.debug(`[DEBUG] Member ${member.user.tag} roles after assignment: ${memberRoles}`);
-        logger.debug(`[DEBUG] Verified role assignment: ${hasRole} for role ID: ${roleId || 'none'}`);
-        
-        if (!hasRole) {
-          logger.warn(`[WARNING] Role assignment verification failed for user ${member.user.tag}. Expected role ID: ${roleId}`);
+        // Get the role for verification
+        const role = await member.guild.roles.fetch(channelRoleId);
+        if (!role) {
+          logger.error(`[ERROR] Role ${channelRoleId} not found in guild ${member.guild.id}`);
+          return;
         }
+        
+        // Log role assignment success
+        logger.debug(`[DEBUG] Successfully assigned role ${role.name} (${role.id}) to ${member.user.tag}`);
       } else {
         logger.warn(`[WARNING] Failed to add voice role to user ${member.user.tag}`);
-        
-        // Log additional debug info
-        logger.debug(`[DEBUG] Voice role manager config:`, {
-          enabled: voiceRoleManager.config?.enabled,
-          channelRoles: voiceRoleManager.config?.channelRoles ? Object.entries(voiceRoleManager.config.channelRoles).map(([cId, rId]) => ({
-            channelId: cId,
-            roleId: rId
-          })) : 'none'
-        });
       }
     } catch (error) {
       logger.error(`[ERROR] Exception in voiceRoleManager.addVoiceRole:`, {
@@ -211,16 +204,255 @@ async function handleVoiceJoin(member, channel) {
  * @returns {Promise<void>}
  */
 async function handleVoiceLeave(member, channel) {
+  const startTime = Date.now();
+  const logContext = {
+    userId: member?.id,
+    userTag: member?.user?.tag,
+    channelId: channel?.id,
+    channelName: channel?.name,
+    guildId: member?.guild?.id,
+    guildName: member?.guild?.name,
+    timestamp: new Date().toISOString()
+  };
+
   try {
-    logger.debug(`User ${member.id} left voice channel ${channel.id} in guild ${member.guild.id}`);
+    if (!member || !channel) {
+      logger.warn('[VOICE_LEAVE] Invalid member or channel provided', logContext);
+      return;
+    }
+    
+    const { guild, user } = member;
+    logger.info(`[VOICE_LEAVE] User ${user.tag} (${user.id}) left voice channel ${channel.name} (${channel.id}) in guild ${guild.name} (${guild.id})`, logContext);
+    
+    // Log member's current roles for debugging
+    const currentRoles = member.roles.cache.map(role => `${role.name} (${role.id})`);
+    const currentRoleIds = member.roles.cache.map(role => role.id);
+    
+    logger.debug(`[DEBUG] User ${user.tag} current roles (${currentRoles.length}):`, {
+      ...logContext,
+      roles: currentRoles,
+      roleCount: currentRoles.length
+    });
+    
+    // Log bot's permissions
+    const me = guild.members.me;
+    if (me) {
+      logger.debug(`[DEBUG] Bot permissions for role management:`, {
+        ...logContext,
+        canManageRoles: me.permissions.has('MANAGE_ROLES'),
+        highestRole: me.roles.highest?.name,
+        highestRolePosition: me.roles.highest?.position,
+        botRoles: me.roles.cache.map(r => `${r.name} (${r.id})`)
+      });
+    }
     
     // Remove voice role from the member
-    await voiceRoleManager.removeVoiceRole(member);
+    try {
+      // Get the guild config
+      const guildConfig = await voiceRoleManager.getGuildConfig(guild.id);
+      
+      logger.debug(`[DEBUG] Guild config for ${guild.id}:`, {
+        ...logContext,
+        enabled: guildConfig?.enabled,
+        channelRoles: guildConfig?.channelRoles || {},
+        roleCount: guildConfig?.channelRoles ? Object.keys(guildConfig.channelRoles).length : 0
+      });
+      
+      // Get roles to be removed
+      const rolesToRemove = guildConfig?.channelRoles ? Object.values(guildConfig.channelRoles) : [];
+      const rolesToRemoveInfo = [];
+      
+      // Get role details for logging
+      for (const roleId of rolesToRemove) {
+        const role = guild.roles.cache.get(roleId);
+        rolesToRemoveInfo.push({
+          id: roleId,
+          name: role?.name || 'Unknown Role',
+          position: role?.position,
+          managed: role?.managed,
+          userHasRole: member.roles.cache.has(roleId)
+        });
+      }
+      
+      logger.info(`[ROLE] Attempting to remove ${rolesToRemoveInfo.filter(r => r.userHasRole).length} roles from ${user.tag}`, {
+        ...logContext,
+        rolesToRemove: rolesToRemoveInfo,
+        rolesCount: rolesToRemoveInfo.length
+      });
+      
+      // Call removeVoiceRole with detailed logging
+      const removeStartTime = Date.now();
+      logger.debug(`[DEBUG] Starting role removal process for ${user.tag}`, {
+        ...logContext,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Force fetch the latest member data before removal
+      try {
+        member = await guild.members.fetch({ user: user.id, force: true });
+        logger.debug(`[DEBUG] Refreshed member data before role removal`, {
+          ...logContext,
+          currentRoles: member.roles.cache.map(r => `${r.name} (${r.id})`)
+        });
+      } catch (fetchError) {
+        logger.error(`[ERROR] Failed to refresh member data before role removal:`, {
+          ...logContext,
+          error: fetchError.message,
+          stack: fetchError.stack
+        });
+      }
+
+      let rolesRemoved = false;
+      try {
+        rolesRemoved = await voiceRoleManager.removeVoiceRole(member);
+      } catch (error) {
+        logger.error(`[ERROR] Error during role removal:`, {
+          ...logContext,
+          error: error.message,
+          stack: error.stack
+        });
+      }
+      
+      const removeTime = Date.now() - removeStartTime;
+      logger.info(`[ROLE] Role removal process completed in ${removeTime}ms`, {
+        ...logContext,
+        success: rolesRemoved,
+        durationMs: removeTime,
+        rolesAfterRemoval: member.roles.cache.map(r => `${r.name} (${r.id})`)
+      });
+      
+      if (rolesRemoved) {
+        // Verify the roles were actually removed
+        const verifyStartTime = Date.now();
+        logger.debug(`[VERIFY] Verifying role removal for ${user.tag}`, {
+          ...logContext,
+          timestamp: new Date().toISOString()
+        });
+        
+        const updatedMember = await guild.members.fetch({ user: user.id, force: true });
+        const remainingRoles = [];
+        
+        for (const roleId of rolesToRemove) {
+          if (updatedMember.roles.cache.has(roleId)) {
+            const role = guild.roles.cache.get(roleId);
+            remainingRoles.push({
+              id: roleId,
+              name: role?.name || 'Unknown Role',
+              position: role?.position
+            });
+          }
+        }
+        
+        const verifyTime = Date.now() - verifyStartTime;
+        
+        if (remainingRoles.length > 0) {
+          logger.warn(`[VERIFY] Failed to verify removal of ${remainingRoles.length} roles for ${user.tag}`, {
+            ...logContext,
+            remainingRoles,
+            durationMs: verifyTime,
+            timestamp: new Date().toISOString()
+          });
+          
+          // Try one more time with individual removal
+          logger.info(`[RETRY] Attempting individual role removal for ${user.tag}`, {
+            ...logContext,
+            remainingRolesCount: remainingRoles.length
+          });
+          
+          for (const { id: roleId, name } of remainingRoles) {
+            const attemptStart = Date.now();
+            try {
+              logger.debug(`[RETRY] Attempting to remove role ${name} (${roleId}) from ${user.tag}`, {
+                ...logContext,
+                roleId,
+                roleName: name,
+                timestamp: new Date().toISOString()
+              });
+              
+              await updatedMember.roles.remove(roleId, 'Force removal after failed verification');
+              
+              // Verify removal
+              const refreshedMember = await guild.members.fetch({ user: user.id, force: true });
+              const stillHasRole = refreshedMember.roles.cache.has(roleId);
+              
+              if (stillHasRole) {
+                throw new Error(`Role still present after removal attempt`);
+              }
+              
+              logger.info(`[SUCCESS] Force-removed role ${name} (${roleId}) from ${user.tag}`, {
+                ...logContext,
+                roleId,
+                roleName: name,
+                durationMs: Date.now() - attemptStart,
+                timestamp: new Date().toISOString()
+              });
+              
+            } catch (error) {
+              logger.error(`[ERROR] Failed to force-remove role ${name} (${roleId}) from ${user.tag}`, {
+                ...logContext,
+                roleId,
+                roleName: name,
+                error: error.message,
+                stack: error.stack,
+                durationMs: Date.now() - attemptStart,
+                timestamp: new Date().toISOString()
+              });
+            }
+            
+            // Rate limit protection
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        } else {
+          logger.info(`[SUCCESS] Verified removal of all roles from ${user.tag}`, {
+            ...logContext,
+            durationMs: verifyTime,
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+    } catch (error) {
+      logger.error(`[ERROR] Failed to remove roles from ${user.tag}`, {
+        ...logContext,
+        error: error.message,
+        stack: error.stack,
+        durationMs: Date.now() - startTime,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Re-throw to be caught by the outer try-catch
+      throw error;
+    }
     
     // Update presence or perform other actions
     await updateMemberPresence(member, 'left');
+    
   } catch (error) {
-    logger.error(`Failed to handle voice leave for user ${member.id}`, error);
+    const errorContext = {
+      ...logContext,
+      error: error.message,
+      stack: error.stack,
+      durationMs: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+    
+    logger.error(`[ERROR] Failed to handle voice leave for user ${member?.user?.tag || 'unknown'}`, errorContext);
+    
+    // Log additional debug info
+    try {
+      if (member?.guild) {
+        const botMember = member.guild.members.me;
+        if (botMember) {
+          logger.debug(`[DEBUG] Bot permissions at time of error:`, {
+            ...errorContext,
+            botPermissions: botMember.permissions.toArray(),
+            botHighestRole: botMember.roles.highest?.name,
+            botRoleCount: botMember.roles.cache.size
+          });
+        }
+      }
+    } catch (debugError) {
+      logger.error(`[ERROR] Failed to gather debug info:`, debugError);
+    }
   }
 }
 

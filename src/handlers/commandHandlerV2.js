@@ -86,21 +86,35 @@ class CommandHandlerV2 {
         try {
           logger.debug(`Loading command file: ${fullPath}`);
           
-          // Import the command module
-          const modulePath = `file://${fullPath}`.replace(/\\/g, '/');
-          const commandModule = await import(modulePath);
-          
-          // Handle default export
-          const command = commandModule.default || commandModule;
-          
-          // Skip if not a valid command
-          if (!command || !command.data || !command.execute) {
-            logger.warn(`Skipping invalid command in ${entry.name}: missing data or execute method`);
+          // Import the command module using require
+          delete require.cache[require.resolve(fullPath)];
+          let commandModule;
+          try {
+            commandModule = require(fullPath);
+            
+            // For CommonJS, we don't need to handle default exports
+            const command = commandModule;
+            
+            // Skip if not a valid command
+            if (!command || !command.data || !command.execute) {
+              logger.warn(`Skipping invalid command in ${entry.name}: missing data or execute method`);
+              logger.debug('Command module content:', JSON.stringify({
+                hasData: !!command?.data,
+                hasExecute: !!command?.execute,
+                keys: command ? Object.keys(command) : []
+              }, null, 2));
+              continue;
+            }
+            
+            // Register the command
+            logger.debug(`Registering command: ${command.data.name} from ${entry.name}`);
+            this.registerCommand(command);
+            logger.debug(`Command ${command.data.name} registered successfully`);
+            
+          } catch (error) {
+            logger.error(`Error requiring command file ${entry.name}:`, error);
             continue;
           }
-          
-          // Register the command
-          this.registerCommand(command);
           
         } catch (error) {
           logger.error(`Error loading command ${entry.name}`, error);
@@ -294,10 +308,79 @@ class CommandHandlerV2 {
       // This allows the bot to continue running even if command registration fails
     }
   }
+  
+  /**
+   * Handle an interaction (slash command or context menu)
+   * @param {import('discord.js').Interaction} interaction - The interaction to handle
+   * @returns {Promise<void>}
+   */
+  async handleInteraction(interaction) {
+    if (!interaction.isCommand() && !interaction.isContextMenuCommand()) return;
+
+    const { commandName } = interaction;
+    const command = this.commands.get(commandName) || this.commands.get(this.aliases.get(commandName));
+
+    if (!command) {
+      logger.warn(`No command matching ${commandName} was found.`);
+      return interaction.reply({
+        content: '❌ This command is not available.',
+        ephemeral: true,
+      });
+    }
+
+    // Check cooldown
+    const { cooldowns } = this;
+    if (!cooldowns.has(command.data.name)) {
+      cooldowns.set(command.data.name, new Collection());
+    }
+
+    const now = Date.now();
+    const timestamps = cooldowns.get(command.data.name);
+    const cooldownAmount = (command.cooldown || 3) * 1000;
+
+    if (timestamps.has(interaction.user.id)) {
+      const expirationTime = timestamps.get(interaction.user.id) + cooldownAmount;
+      if (now < expirationTime) {
+        const timeLeft = (expirationTime - now) / 1000;
+        return interaction.reply({
+          content: `Please wait ${timeLeft.toFixed(1)} more second(s) before reusing the \`${command.data.name}\` command.`,
+          ephemeral: true,
+        });
+      }
+    }
+
+    timestamps.set(interaction.user.id, now);
+    setTimeout(() => timestamps.delete(interaction.user.id), cooldownAmount);
+
+    // Execute the command
+    try {
+      logger.info(`Executing command ${command.data.name} for ${interaction.user.tag}`);
+      // Pass both interaction and client to the execute function
+      await command.execute(interaction, interaction.client);
+    } catch (error) {
+      logger.error(`Error executing command ${command.data.name}:`, error);
+      
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({
+          content: '❌ There was an error executing this command!',
+          ephemeral: true,
+        });
+      } else {
+        await interaction.followUp({
+          content: '❌ There was an error executing this command!',
+          ephemeral: true,
+        });
+      }
+    }
+  }
 }
 
-// Export a singleton instance
+// Create and initialize the singleton instance
 const commandHandler = new CommandHandlerV2();
 
+// Export the singleton instance
 module.exports = commandHandler;
+
+// For backward compatibility with existing code
+module.exports.CommandHandlerV2 = CommandHandlerV2;
 module.exports.commandHandler = commandHandler;

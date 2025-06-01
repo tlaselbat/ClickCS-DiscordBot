@@ -1,7 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const logger = require('./logger');
-
+const VCConfig = require('./vc-config');
 
 // Paths
 const paths = {
@@ -39,6 +39,8 @@ const defaultConfig = {
 class Config {
   constructor() {
     this.config = { ...defaultConfig };
+    // Initialize VC config
+    this.vcConfig = new VCConfig(path.join(process.cwd(), 'config'));
   }
 
   /**
@@ -215,6 +217,25 @@ class Config {
     const lastKey = keys[keys.length - 1];
     obj[lastKey] = value;
     return true;
+  }
+
+  /**
+   * Get VC configuration for a guild
+   * @param {string} guildId - The guild ID
+   * @returns {Promise<Object>} The VC configuration
+   */
+  async getVCConfig(guildId) {
+    return this.vcConfig.getVCConfig(guildId);
+  }
+
+  /**
+   * Save VC configuration for a guild
+   * @param {string} guildId - The guild ID
+   * @param {Object} config - The configuration to save
+   * @returns {Promise<void>}
+   */
+  async saveVCConfig(guildId, config) {
+    return this.vcConfig.saveVCConfig(guildId, config);
   }
 }
 

@@ -6,6 +6,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { existsSync, mkdirSync } = require('fs');
+const logger = require('./logger');
 
 /**
  * Channel-Role mapping configuration
@@ -76,20 +77,63 @@ class VCConfig {
      */
     async getVCConfig(guildId) {
         const configPath = this.getConfigPath(guildId);
+        const guildsDir = path.join(this.configDir, 'guilds');
+        
+        logger.info(`[VC-CONFIG] Loading config for guild ${guildId}`);
+        logger.debug(`[VC-CONFIG] Config path: ${configPath}`);
+        
         try {
+            // Check if guilds directory exists
+            const guildsDirExists = await fs.access(guildsDir).then(() => true).catch(() => false);
+            logger.debug(`[VC-CONFIG] Guilds directory exists: ${guildsDirExists}`);
+            
+            if (!guildsDirExists) {
+                logger.warn(`[VC-CONFIG] Guilds directory does not exist, creating it`);
+                await fs.mkdir(guildsDir, { recursive: true });
+                logger.info(`[VC-CONFIG] Created guilds directory at ${guildsDir}`);
+            }
+            
             // Check if file exists
             const fileExists = await fs.access(configPath).then(() => true).catch(() => false);
+            logger.debug(`[VC-CONFIG] Config file exists: ${fileExists}`);
 
             if (!fileExists) {
+                logger.warn(`[VC-CONFIG] Config file not found for guild ${guildId}, creating default config`);
                 // Create default config if file doesn't exist
                 await this.saveVCConfig(guildId, this.defaultConfig);
+                logger.info(`[VC-CONFIG] Created default config for guild ${guildId}`);
                 return { ...this.defaultConfig };
             }
 
-            const config = await fs.readFile(configPath, 'utf8');
-            return JSON.parse(config);
+            logger.debug(`[VC-CONFIG] Reading config file for guild ${guildId}`);
+            const configData = await fs.readFile(configPath, 'utf8');
+            logger.debug(`[VC-CONFIG] Raw config data:`, configData);
+            
+            let config;
+            try {
+                config = JSON.parse(configData);
+                logger.debug(`[VC-CONFIG] Successfully parsed config for guild ${guildId}`);
+            } catch (parseError) {
+                logger.error(`[VC-CONFIG] Failed to parse config for guild ${guildId}:`, parseError);
+                logger.warn(`[VC-CONFIG] Using default config due to parse error`);
+                return { ...this.defaultConfig };
+            }
+            
+            logger.info(`[VC-CONFIG] Successfully loaded config for guild ${guildId}`, {
+                hasConfig: !!config,
+                configKeys: config ? Object.keys(config) : 'no config',
+                hasChannelRoles: !!(config && config.channelRoles),
+                channelRolesCount: config && config.channelRoles ? Object.keys(config.channelRoles).length : 0
+            });
+            
+            return config;
         } catch (error) {
-            console.error(`Error loading config for guild ${guildId}:`, error);
+            logger.error(`[VC-CONFIG] Error loading config for guild ${guildId}:`, {
+                error: error.message,
+                stack: error.stack,
+                configPath: configPath,
+                configDir: path.dirname(configPath)
+            });
             // Return default config on error
             return { ...this.defaultConfig };
         }
@@ -111,25 +155,31 @@ class VCConfig {
      */
     async saveVCConfig(guildId, config) {
         const configPath = this.getConfigPath(guildId);
-        console.log(`[VC-CONFIG] Attempting to save config for guild ${guildId} to ${configPath}`);
+        const parentDir = path.dirname(configPath);
+        
+        logger.info(`[VC-CONFIG] Attempting to save config for guild ${guildId} to ${configPath}`);
+        logger.debug(`[VC-CONFIG] Config to save:`, {
+            enabled: config.enabled,
+            channelRolesCount: config.channelRoles ? Object.keys(config.channelRoles).length : 0,
+            configKeys: Object.keys(config)
+        });
         
         try {
             // Ensure parent directory exists
-            const parentDir = path.dirname(configPath);
-            console.log(`[VC-CONFIG] Ensuring directory exists: ${parentDir}`);
+            logger.debug(`[VC-CONFIG] Ensuring directory exists: ${parentDir}`);
             
             if (!existsSync(parentDir)) {
-                console.log(`[VC-CONFIG] Creating directory: ${parentDir}`);
+                logger.warn(`[VC-CONFIG] Directory does not exist, creating: ${parentDir}`);
                 mkdirSync(parentDir, { recursive: true });
-                console.log(`[VC-CONFIG] Directory created successfully`);
+                logger.info(`[VC-CONFIG] Directory created successfully`);
             }
 
             // Verify we can write to the directory
             try {
                 await fs.access(parentDir, fs.constants.W_OK);
-                console.log(`[VC-CONFIG] Write access verified for directory: ${parentDir}`);
+                logger.debug(`[VC-CONFIG] Write access verified for directory: ${parentDir}`);
             } catch (accessError) {
-                console.error(`[VC-CONFIG] No write access to directory ${parentDir}:`, accessError);
+                logger.error(`[VC-CONFIG] No write access to directory ${parentDir}:`, accessError);
                 throw new Error(`No write access to config directory: ${accessError.message}`);
             }
 
@@ -137,23 +187,31 @@ class VCConfig {
             let configString;
             try {
                 configString = JSON.stringify(config, null, 2);
-                console.log(`[VC-CONFIG] Successfully stringified config`);
+                logger.debug(`[VC-CONFIG] Successfully stringified config`);
             } catch (stringifyError) {
-                console.error(`[VC-CONFIG] Failed to stringify config:`, stringifyError);
+                logger.error(`[VC-CONFIG] Failed to stringify config:`, stringifyError);
                 throw new Error(`Invalid configuration data: ${stringifyError.message}`);
             }
 
             // Try to write the file
-            console.log(`[VC-CONFIG] Writing config to ${configPath}`);
+            logger.debug(`[VC-CONFIG] Writing config to ${configPath}`);
             await fs.writeFile(configPath, configString, 'utf8');
-            console.log(`[VC-CONFIG] Successfully saved config for guild ${guildId}`);
+            logger.info(`[VC-CONFIG] Successfully saved config for guild ${guildId}`);
             
             // Verify the file was written
             try {
                 const stats = await fs.stat(configPath);
-                console.log(`[VC-CONFIG] Config file verified, size: ${stats.size} bytes`);
+                logger.debug(`[VC-CONFIG] Config file verified, size: ${stats.size} bytes`);
+                
+                // Read back the file to verify contents
+                const fileContent = await fs.readFile(configPath, 'utf8');
+                const parsedContent = JSON.parse(fileContent);
+                logger.debug(`[VC-CONFIG] Verified config contents:`, {
+                    hasChannelRoles: !!parsedContent.channelRoles,
+                    channelRolesCount: parsedContent.channelRoles ? Object.keys(parsedContent.channelRoles).length : 0
+                });
             } catch (verifyError) {
-                console.error(`[VC-CONFIG] Failed to verify config file after write:`, verifyError);
+                logger.error(`[VC-CONFIG] Failed to verify config file after write:`, verifyError);
                 throw new Error(`Failed to verify config file after write: ${verifyError.message}`);
             }
         } catch (error) {
