@@ -5,8 +5,7 @@
     "maxRetries": 3,
     "retryDelay": 2000,
     "presenceUpdateInterval": 120000,
-    "environment": "development",
-    "token": ""
+    "environment": "development"
   },
   "permissions": {
     "adminRoles": [],
