@@ -112,6 +112,7 @@ function formatStatus(text, client, options = {}) {
 async function loadPresenceConfig() {
     try {
         logger.info('🔄 Loading presence configuration...');
+        let loadedConfig = null;
 
         // Ensure config directory exists
         try {
@@ -126,95 +127,96 @@ async function loadPresenceConfig() {
             throw new Error(`Failed to create config directory: ${dirError.message}`);
         }
 
-        let configData;
+        // Try to read and parse the config file
         try {
-            logger.debug(`📂 Reading config from: ${PRESENCE_CONFIG_PATH}`);
-            configData = fs.readFileSync(PRESENCE_CONFIG_PATH, 'utf8');
-            logger.debug('✅ Successfully read presence config file');
-
-            // Parse and validate the config
-            const loadedConfig = JSON.parse(configData);
-            logger.debug('🔍 Parsed config:', JSON.stringify(loadedConfig, null, 2));
-
-            try {
-                validatePresenceConfig(loadedConfig);
-                logger.debug('✅ Config validation passed');
-            } catch (validationError) {
-                logger.error('❌ Config validation failed:', validationError);
-                throw new Error(`Invalid presence config: ${validationError.message}`);
-            }
-
-            // Merge with defaults
-            currentPresence = deepMerge({}, DEFAULT_PRESENCE, loadedConfig);
-            logger.info('✅ Successfully loaded and merged presence config');
-
-        } catch (readError) {
-            if (readError.code === 'ENOENT') {
-                logger.warn('⚠️  No presence config found, creating default...');
-
-                try {
-                    // Create default config file
-                    fs.writeFileSync(
-                        PRESENCE_CONFIG_PATH,
-                        JSON.stringify(DEFAULT_PRESENCE, null, 2) + '\n',
-                        { encoding: 'utf8', flag: 'w' }
-                    );
-                    currentPresence = { ...DEFAULT_PRESENCE };
-                    logger.info('✅ Created default presence configuration');
-                } catch (writeError) {
-                    logger.error('❌ Failed to create default config:', writeError);
-                    throw new Error(`Failed to create default config: ${writeError.message}`);
-                }
+            if (fs.existsSync(PRESENCE_CONFIG_PATH)) {
+                logger.debug(`📂 Reading config from: ${PRESENCE_CONFIG_PATH}`);
+                const configData = fs.readFileSync(PRESENCE_CONFIG_PATH, 'utf8');
+                loadedConfig = JSON.parse(configData);
+                logger.debug('✅ Successfully parsed presence config');
             } else {
-                logger.error('❌ Error reading presence config:', readError);
-                currentPresence = { ...DEFAULT_PRESENCE };
-                logger.warn('⚠️  Using default presence configuration due to error');
-                return false;
+                logger.warn('⚠️  No presence config found, using defaults');
+                loadedConfig = { ...DEFAULT_PRESENCE };
+                // Save default config for next time
+                fs.writeFileSync(
+                    PRESENCE_CONFIG_PATH,
+                    JSON.stringify(loadedConfig, null, 2) + '\n',
+                    { encoding: 'utf8' }
+                );
+                logger.info('✅ Created default presence configuration');
             }
+        } catch (error) {
+            logger.error('❌ Error loading presence config:', error);
+            loadedConfig = { ...DEFAULT_PRESENCE };
+            logger.warn('⚠️  Using default presence configuration due to error');
         }
 
-                if (!currentPresence.activities || !Array.isArray(currentPresence.activities) || currentPresence.activities.length === 0) {
-            logger.warn('No valid activities found in config, using defaults');
-            currentPresence.activities = [...DEFAULT_PRESENCE.activities];
+        // Ensure we have a valid config object
+        if (!loadedConfig || typeof loadedConfig !== 'object') {
+            logger.warn('⚠️  Invalid config format, using defaults');
+            loadedConfig = { ...DEFAULT_PRESENCE };
+        }
+
+        // Ensure activities array exists and is valid
+        if (!Array.isArray(loadedConfig.activities) || loadedConfig.activities.length === 0) {
+            logger.warn('⚠️  No valid activities found, using defaults');
+            loadedConfig.activities = [...DEFAULT_PRESENCE.activities];
         } else {
-                        currentPresence.activities = currentPresence.activities
-              .filter(activity => activity && activity.name && activity.type)
-              .map(activity => ({
-                  name: activity.name || 'Discord Bot',
-                  type: activity.type || 'PLAYING',
-                  url: activity.url || null
-              }));
+            // Clean up activities
+            loadedConfig.activities = loadedConfig.activities
+                .filter(activity => activity && activity.name && activity.type)
+                .map(activity => ({
+                    name: activity.name,
+                    type: activity.type.toUpperCase(),
+                    url: activity.url || null
+                }));
 
-            if (currentPresence.activities.length === 0) {
-                logger.warn('No valid activities after validation, using defaults');
-                currentPresence.activities = [...DEFAULT_PRESENCE.activities];
+            if (loadedConfig.activities.length === 0) {
+                logger.warn('⚠️  No valid activities after cleanup, using defaults');
+                loadedConfig.activities = [...DEFAULT_PRESENCE.activities];
             }
         }
 
-                if (typeof currentPresence.updateInterval !== 'number' || currentPresence.updateInterval < 15000) {
-            logger.warn('Invalid updateInterval, using default (60s)');
-            currentPresence.updateInterval = 60000; // 1 minute
+
+        // Ensure updateInterval is valid
+        if (typeof loadedConfig.updateInterval !== 'number' || loadedConfig.updateInterval < 15000) {
+            logger.warn('⚠️  Invalid updateInterval, using default (60s)');
+            loadedConfig.updateInterval = 60000; // 1 minute
         }
 
-        logger.info('Successfully loaded presence configuration');
+        // Ensure status is valid
+        if (!VALID_PRESENCE_STATUSES.includes(loadedConfig.status)) {
+            logger.warn(`⚠️  Invalid status '${loadedConfig.status}', using 'online'`);
+            loadedConfig.status = 'online';
+        }
+
+        // Update current presence
+        currentPresence = { ...DEFAULT_PRESENCE, ...loadedConfig };
+        
+        // Ensure rotation settings exist
+        if (!currentPresence.rotation || typeof currentPresence.rotation !== 'object') {
+            currentPresence.rotation = { ...DEFAULT_PRESENCE.rotation };
+        }
+
+        logger.info('✅ Successfully loaded presence configuration');
         return true;
 
     } catch (error) {
-        logger.error('Error in loadPresenceConfig:', error);
-
+        logger.error('❌ Critical error in loadPresenceConfig:', error);
+        
         // Fall back to default config
         currentPresence = { ...DEFAULT_PRESENCE };
-        logger.warn('Falling back to default presence configuration');
+        logger.warn('⚠️  Falling back to default presence configuration');
 
         // Try to save the default config for next time
         try {
             fs.writeFileSync(
                 PRESENCE_CONFIG_PATH,
                 JSON.stringify(DEFAULT_PRESENCE, null, 2) + '\n',
-                { encoding: 'utf8', flag: 'w' }
+                { encoding: 'utf8' }
             );
         } catch (writeError) {
-            logger.error('Failed to save default presence config:', writeError);
+            logger.error('❌ Failed to save default presence config:', writeError);
         }
 
         return false;
@@ -898,41 +900,40 @@ async function handleReady(client) {
 
         // Load presence configuration
         logger.info('2. Loading presence configuration...');
-        let configLoaded = false;
         try {
-            configLoaded = await loadPresenceConfig();
+            const configLoaded = await loadPresenceConfig();
             if (!configLoaded) {
                 logger.warn('❌ Failed to load presence configuration, using defaults');
             } else {
                 logger.info('✅ Presence configuration loaded successfully');
             }
+            
+            // Log current presence config for debugging
+            logger.debug('Current presence config:', JSON.stringify({
+                status: currentPresence.status || 'online',
+                activities: (currentPresence.activities || []).length,
+                rotation: currentPresence.rotation?.enabled ? 'enabled' : 'disabled',
+                rotationInterval: currentPresence.rotation?.interval || 'N/A'
+            }, null, 2));
+            
         } catch (error) {
             logger.error('❌ Error loading presence config:', error);
-            throw error;
+            // Continue with default config
+            currentPresence = { ...DEFAULT_PRESENCE };
+            logger.warn('⚠️  Using default presence configuration due to error');
         }
 
-        // Get the current presence configuration
-        const presenceConfig = await loadPresenceConfig();
-        
-        // Log current presence config for debugging
-        logger.debug('Current presence config:', JSON.stringify({
-            status: presenceConfig.status || 'online',
-            activities: (presenceConfig.activities || []).length,
-            rotation: presenceConfig.rotation?.enabled ? 'enabled' : 'disabled',
-            rotationInterval: presenceConfig.rotation?.interval || 'N/A'
-        }, null, 2));
-
         // Start presence rotation if enabled
-        if (presenceConfig.rotation?.enabled) {
+        if (currentPresence.rotation?.enabled) {
             logger.info('Starting presence rotation...');
             const rotationStarted = await startPresenceRotation(client);
             if (rotationStarted) {
-                logger.info(`Started presence rotation with ${(presenceConfig.activities || []).length} activities`);
+                logger.info(`Started presence rotation with ${(currentPresence.activities || []).length} activities`);
             } else {
                 logger.warn('Failed to start presence rotation, falling back to static presence');
                 await updatePresence(client, {
-                    status: presenceConfig.status || 'online',
-                    activities: presenceConfig.activities || []
+                    status: currentPresence.status || 'online',
+                    activities: currentPresence.activities || []
                 });
             }
         } else {

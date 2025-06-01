@@ -3,19 +3,19 @@
     "activities": [
         {
             "name": "on {guilds} servers",
-            "type": 3
+            "type": "WATCHING"
         },
         {
             "name": "with {users} users",
-            "type": 0
+            "type": "PLAYING"
         },
         {
             "name": "v{version}",
-            "type": 0
+            "type": "PLAYING"
         },
         {
             "name": "{prefix}help",
-            "type": 2
+            "type": "LISTENING"
         }
     ],
     "statusMessages": [
