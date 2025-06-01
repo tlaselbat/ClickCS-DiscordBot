@@ -2,175 +2,288 @@ const { Collection } = require('discord.js');
 const path = require('path');
 const { readdir } = require('fs').promises;
 const logger = require('../utils/logger');
-const { RateLimitError } = require('../utils/errorHandler');
+const { isDev } = require('../utils/env');
 
-// Command rate limiting (5 commands per 10 seconds per user)
+// Command rate limiting
 const userCooldowns = new Collection();
-const COOLDOWN_AMOUNT = 10 * 1000; // 10 seconds
-const MAX_COMMANDS = 5;
+const COOLDOWN_AMOUNT = 30 * 1000; // 30 seconds
+const MAX_COMMANDS = 10;
 
 class CommandHandler {
   constructor() {
+    // Store the Discord client
+    this.client = null;
+    
+    // Unified command storage
     this.commands = new Collection();
     this.aliases = new Map();
     this.cooldowns = new Collection();
+    
+    // Application command data for registration
+    this.slashCommands = [];
+    this.contextMenus = [];
+  }
+  
+  /**
+   * Set the Discord client instance
+   * @param {import('discord.js').Client} client - The Discord client
+   */
+  setClient(client) {
+    this.client = client;
   }
 
   /**
-   * Load all commands from the commands directory
-   * @param {string} [directory] - Directory to load commands from
-   * @returns {Promise<void>}
-   */
-  /**
    * Register a command with the handler
    * @param {Object} command - The command to register
-   * @param {string} command.name - The name of the command
-   * @param {Function} command.execute - The function to execute when the command is called
-   * @param {string} [command.description] - Description of the command
-   * @param {string[]} [command.aliases=[]] - Aliases for the command
-   * @param {boolean} [command.guildOnly=false] - Whether the command can only be used in guilds
-   * @param {boolean} [command.ownerOnly=false] - Whether the command can only be used by the bot owner
-   * @param {import('discord.js').PermissionResolvable[]} [command.permissions=[]] - Required permissions to use the command
-   * @param {boolean} [command.slashCommand=false] - Whether this is a slash command
    * @returns {void}
    */
   registerCommand(command) {
-    const commandName = command.slashCommand ? command.name : `legacy_${command.name}`;
+    const commandName = command.data?.name || command.name;
     
+    if (!commandName) {
+      throw new Error('Command must have a name or data.name');
+    }
+
     if (this.commands.has(commandName)) {
       throw new Error(`A command with the name "${commandName}" is already registered.`);
     }
 
+    // Add to appropriate collections
     this.commands.set(commandName, command);
     
+    // Handle application commands
+    if (command.data) {
+      if (command.data.type === 'MESSAGE' || command.data.type === 'USER') {
+        this.contextMenus.push(command.data);
+      } else {
+        this.slashCommands.push(command.data);
+      }
+    }
+    
     // Register aliases if they exist
-    if (command.aliases && Array.isArray(command.aliases)) {
+    if (command.aliases?.length) {
       for (const alias of command.aliases) {
         if (this.aliases.has(alias)) {
-          console.log(`[WARN] Skipping duplicate alias: ${alias}`);
+          logger.warn(`Skipping duplicate alias: ${alias}`);
           continue;
         }
         this.aliases.set(alias, commandName);
-        console.log(`[DEBUG] Registered alias: ${alias} -> ${commandName}`);
+        logger.debug(`Registered alias: ${alias} -> ${commandName}`);
       }
     }
+    
+    logger.info(`Registered command: ${commandName} (${command.data ? 'slash' : 'message'} command)`);
   }
 
+  /**
+   * Load all commands from a directory
+   * @param {string} [directory] - Directory to load commands from
+   * @returns {Promise<void>}
+   */
   async loadCommands(directory = path.join(process.cwd(), 'src/commands')) {
     try {
-      const commandsPath = directory;
-      console.log(`[DEBUG] Loading commands from: ${commandsPath}`);
+      logger.info(`Loading commands from: ${directory}`);
       
-      // Get all JS files in the directory and subdirectories
-      const commandFiles = [];
       const readCommands = async (dir) => {
-        try {
-          const entries = await readdir(dir, { withFileTypes: true });
-          for (const entry of entries) {
-            const fullPath = path.join(dir, entry.name);
-            if (entry.isDirectory()) {
-              await readCommands(fullPath);
-            } else if (entry.name.endsWith('.js') && 
-                     !entry.name.startsWith('_') && 
-                     !entry.name.endsWith('.test.js')) {
-              commandFiles.push(fullPath);
+        const entries = await readdir(dir, { withFileTypes: true });
+        
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          
+          if (entry.isDirectory()) {
+            await readCommands(fullPath);
+            continue;
+          }
+          
+          // Skip non-JS files and test files
+          if (!entry.name.endsWith('.js') || entry.name.startsWith('_') || entry.name.endsWith('.test.js')) {
+            continue;
+          }
+          
+          try {
+            const commandModule = require(fullPath);
+            
+            // Handle different export formats
+            if (commandModule.data) {
+              // Slash command
+              this.registerCommand(commandModule);
+            } else if (commandModule.messageCommand) {
+              // Legacy message command
+              this.registerCommand({
+                ...commandModule.messageCommand,
+                isLegacy: true
+              });
+            } else if (commandModule.name && commandModule.execute) {
+              // Direct legacy command
+              this.registerCommand({
+                ...commandModule,
+                isLegacy: true
+              });
+            } else {
+              logger.warn(`Invalid command format in ${entry.name}: missing required properties`);
+            }
+          } catch (error) {
+            logger.error(`Error loading command ${entry.name}:`, error);
+            if (isDev()) {
+              console.error(error);
             }
           }
-        } catch (error) {
-          console.error(`[ERROR] Failed to read directory ${dir}:`, error);
-          throw error;
         }
       };
       
-      await readCommands(commandsPath);
-      console.log(`[DEBUG] Found command files: ${commandFiles.map(f => path.relative(commandsPath, f)).join(', ')}`);
-
-      for (const filePath of commandFiles) {
-        console.log(`[DEBUG] Loading command file: ${filePath}`);
-        try {
-          // Import the command file
-          const commandModule = await import(`file://${filePath.replace(/\\/g, '/')}`);
-          
-          // Handle default export (common pattern)
-          if (commandModule.default) {
-            const { data, execute } = commandModule.default;
-            if (data && execute) {
-              const slashCommand = {
-                name: data.name,
-                description: data.description || 'No description provided',
-                data,
-                execute: (interaction) => execute(interaction, interaction.client),
-                slashCommand: true
-              };
-              this.registerCommand(slashCommand);
-              logger.debug(`Loaded slash command (default export): ${slashCommand.name}`);
-              continue;
-            }
-          }
-          
-          // Handle direct exports (alternative pattern)
-          if (commandModule.data && commandModule.execute) {
-            const slashCommand = {
-              name: commandModule.data.name,
-              description: commandModule.data.description || 'No description provided',
-              data: commandModule.data,
-              execute: (interaction) => commandModule.execute(interaction, interaction.client),
-              slashCommand: true
-            };
-            this.registerCommand(slashCommand);
-            logger.debug(`Loaded slash command (direct export): ${slashCommand.name}`);
-          }
-          
-          // Handle message command if it exists
-          if (commandModule.messageCommand) {
-            const { name, execute, ...rest } = commandModule.messageCommand;
-            const messageCommand = {
-              name,
-              execute,
-              slashCommand: false,
-              ...rest
-            };
-              
-              this.registerCommand(messageCommand);
-              logger.debug(`Loaded message command: ${messageCommand.name}`);
-            }
-
-
-          // Handle standalone message commands
-          else if (commandModule.messageCommand) {
-            const { name, execute, ...rest } = commandModule.messageCommand;
-            const messageCommand = {
-              name,
-              execute,
-              slashCommand: false,
-              ...rest
-            };
-            
-            this.registerCommand(messageCommand);
-            logger.debug(`Loaded message command: ${messageCommand.name}`);
-          }
-          // Handle legacy format (for backward compatibility)
-          else if (commandModule.name && commandModule.execute) {
-            const legacyCommand = {
-              ...commandModule,
-              slashCommand: false
-            };
-            
-            this.registerCommand(legacyCommand);
-            logger.debug(`Loaded legacy command: ${legacyCommand.name}`);
-          } else {
-            logger.warn(`Command in ${filePath} is missing required properties`);
-            continue;
-          }
-        } catch (error) {
-          logger.error(`Error loading command ${filePath}`, error);
-        }
-      }
+      await readCommands(directory);
       
       logger.info(`Successfully loaded ${this.commands.size} commands`);
+      logger.info(`- Slash commands: ${this.slashCommands.length}`);
+      logger.info(`- Context menus: ${this.contextMenus.length}`);
+      logger.info(`- Legacy commands: ${[...this.commands.values()].filter(cmd => cmd.isLegacy).length}`);
+      
     } catch (error) {
-      logger.error('Failed to load commands', error);
+      logger.error('Failed to load commands:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Register application commands with Discord
+   * @param {import('discord.js').Client} client - The Discord client
+   * @returns {Promise<void>}
+   */
+  async registerApplicationCommands(client) {
+    try {
+      if (!client.application) {
+        throw new Error('Client application is not ready');
+      }
+
+      logger.info('Registering application commands...');
+      
+      const testGuildId = process.env.TEST_GUILD_ID;
+      const commands = [...this.slashCommands, ...this.contextMenus];
+      
+      if (testGuildId) {
+        // Register commands in test guild
+        const guild = client.guilds.cache.get(testGuildId);
+        if (!guild) {
+          throw new Error(`Test guild ${testGuildId} not found`);
+        }
+        
+        await guild.commands.set(commands);
+        logger.info(`Registered ${commands.length} commands to test guild ${guild.name}`);
+      } else {
+        // Register global commands
+        await client.application.commands.set(commands);
+        logger.info(`Registered ${commands.length} commands globally`);
+      }
+      
+    } catch (error) {
+      logger.error('Failed to register application commands:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle a message interaction (legacy commands)
+   * @param {import('discord.js').Message} message - The message to handle
+   * @param {string} prefix - Command prefix
+   * @returns {Promise<boolean>} True if a command was handled
+   */
+  async handleMessage(message, prefix) {
+    if (message.author.bot || !message.guild || !message.content.startsWith(prefix)) {
+      return false;
+    }
+    
+    const args = message.content.slice(prefix.length).trim().split(/ +/);
+    const commandName = args.shift().toLowerCase();
+    
+    // Get command (prefixed with 'legacy_' for legacy commands)
+    const command = this.getCommand(`legacy_${commandName}`) || this.getCommand(commandName);
+    if (!command || !command.isLegacy) {
+      return false;
+    }
+    
+    // Check cooldown
+    const cooldownInfo = this.isRateLimited(message.author.id);
+    if (cooldownInfo.limited) {
+      await message.reply(
+        `Please wait ${cooldownInfo.remaining} seconds before using another command.`
+      ).catch(console.error);
+      return true;
+    }
+    
+    // Execute command
+    try {
+      logger.info(`Executing legacy command: ${command.name} by ${message.author.tag}`);
+      await command.execute(message, args);
+      return true;
+    } catch (error) {
+      logger.error(`Error executing legacy command ${command.name}:`, error);
+      
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+      if (message.channel.permissionsFor(message.guild.me).has('SEND_MESSAGES')) {
+        const reply = await message.reply(`❌ ${errorMessage}`);
+        setTimeout(() => reply.deletable && reply.delete().catch(() => {}), 10000);
+      }
+      
+      return true;
+    }
+  }
+
+  /**
+   * Handle a slash command or context menu interaction
+   * @param {import('discord.js').Interaction} interaction - The interaction to handle
+   * @returns {Promise<boolean>} True if the interaction was handled
+   */
+  async handleInteraction(interaction) {
+    if (!interaction.isCommand() && !interaction.isContextMenuCommand()) {
+      return false;
+    }
+
+    const command = this.getCommand(interaction.commandName);
+    if (!command || command.isLegacy) {
+      return false;
+    }
+
+    // Check cooldown (skip for bot owner)
+    if (interaction.user.id !== interaction.client.application.owner?.id) {
+      const cooldownInfo = this.isRateLimited(interaction.user.id);
+      if (cooldownInfo.limited) {
+        await interaction.reply({
+          content: `Please wait ${cooldownInfo.remaining} seconds before using another command.`,
+          ephemeral: true
+        });
+        return true;
+      }
+    }
+
+    // Execute command
+    try {
+      logger.info(`Executing slash command: ${command.data.name} by ${interaction.user.tag}`);
+      
+      if (command.defer) {
+        await interaction.deferReply({ ephemeral: command.ephemeral });
+      }
+      
+      await command.execute(interaction, this.client);
+      return true;
+      
+    } catch (error) {
+      logger.error(`Error executing slash command ${command.data.name}:`, error);
+      
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+      
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp({
+          content: `❌ ${errorMessage}`,
+          ephemeral: true
+        }).catch(console.error);
+      } else {
+        await interaction.reply({
+          content: `❌ ${errorMessage}`,
+          ephemeral: true
+        }).catch(console.error);
+      }
+      
+      return true;
     }
   }
 
@@ -190,7 +303,7 @@ class CommandHandler {
   /**
    * Check if a user is rate limited
    * @param {string} userId - User ID to check
-   * @returns {boolean} True if user is rate limited
+   * @returns {Object} Object with limited status and remaining time
    */
   isRateLimited(userId) {
     // Get or initialize user's command timestamps
@@ -207,202 +320,26 @@ class CommandHandler {
     
     // Check if user has exceeded the rate limit
     if (recentCommands.length >= MAX_COMMANDS) {
-      return true;
+      const oldest = recentCommands[0];
+      const cooldownEnd = oldest + COOLDOWN_AMOUNT;
+      const remaining = Math.ceil((cooldownEnd - now) / 1000);
+      
+      return {
+        limited: true,
+        remaining,
+        reset: cooldownEnd
+      };
     }
     
     // Add current timestamp
     recentCommands.push(now);
-    return false;
-  }
-
-  /**
-   * Handle an incoming message as a potential command
-   * @param {import('discord.js').Message} message - The message to handle
-   * @param {string} prefix - Command prefix
-   * @returns {Promise<boolean>} True if a command was handled
-   */
-  /**
-   * Check if a member has the required permissions for a command
-   * @param {import('discord.js').GuildMember} member - The guild member
-   * @param {Object} command - The command to check permissions for
-   * @returns {Object} Object with hasPermission and errorMessage properties
-   */
-  checkPermissions(member, command) {
-    // Check if command requires specific permissions
-    if (command.permissions && command.permissions.length > 0) {
-      const missingPerms = [];
-      
-      for (const perm of command.permissions) {
-        if (!member.permissions.has(perm)) {
-          const permName = typeof perm === 'string' 
-            ? perm.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ')
-            : Object.entries(PermissionFlagsBits).find(([_, v]) => v === perm)?.[0]
-                ?.split('_')
-                .map(word => word.charAt(0) + word.slice(1).toLowerCase())
-                .join(' ') || 'Unknown';
-          
-          missingPerms.push(permName);
-        }
-      }
-      
-      if (missingPerms.length > 0) {
-        return {
-          hasPermission: false,
-          errorMessage: `❌ You need the following permissions to use this command: ${missingPerms.join(', ')}`
-        };
-      }
-    }
-    
-    // Check if command is owner-only
-    if (command.ownerOnly && member.id !== member.guild.ownerId) {
-      return {
-        hasPermission: false,
-        errorMessage: '❌ This command can only be used by the server owner.'
-      };
-    }
-    
-    // Check if command is guild-only
-    if (command.guildOnly && !member.guild) {
-      return {
-        hasPermission: false,
-        errorMessage: '❌ This command can only be used in a server.'
-      };
-    }
-    
-    return { hasPermission: true };
-  }
-
-  async handleMessage(message, prefix) {
-    // Ignore messages from bots and DMs
-    if (message.author.bot || !message.guild) return false;
-    
-    // Check if message starts with the prefix
-    if (!message.content.startsWith(prefix)) return false;
-    
-    try {
-      // Parse command and arguments
-      const args = message.content.slice(prefix.length).trim().split(/ +/);
-      const commandName = args.shift().toLowerCase();
-      
-      // Get the command (prefixed with 'legacy_' for message commands)
-      const command = this.getCommand(`legacy_${commandName}`) || this.getCommand(commandName);
-      if (!command) return false;
-      
-      // Check if this is a slash command
-      if (command.slashCommand) {
-        await message.reply({
-          content: `This command is only available as a slash command. Use \`/${command.name}\` instead.`,
-          allowedMentions: { repliedUser: false }
-        });
-        return true;
-      }
-      
-      // Check permissions
-      const { hasPermission, errorMessage } = this.checkPermissions(message.member, command);
-      if (!hasPermission) {
-        await message.reply({
-          content: errorMessage,
-          allowedMentions: { repliedUser: false }
-        });
-        return true;
-      }
-      
-      // Check rate limiting
-      if (this.isRateLimited(message.author.id)) {
-        const cooldownTime = Math.ceil(COOLDOWN_AMOUNT / 1000);
-        await message.reply({
-          content: `You're using commands too quickly. Please wait ${cooldownTime} seconds before using another command.`,
-          allowedMentions: { repliedUser: false }
-        });
-        return true;
-      }
-
-      // Check permissions
-      if (command.permissions) {
-        const hasPermission = await this.checkPermissions(message, command);
-        if (!hasPermission) {
-          await message.reply('You do not have permission to use this command.');
-          return true;
-        }
-      }
-
-      // Execute the command
-      logger.info(`Executing command '${command.name}' for user ${message.author.tag}`);
-      await command.execute(message, args);
-      return true;
-      
-    } catch (error) {
-      logger.error('Error handling message command', error);
-      
-      try {
-        const errorMessage = error instanceof RateLimitError 
-          ? error.message 
-          : 'There was an error executing that command. Please try again later.';
-          
-        if (message.channel.permissionsFor(message.guild.me).has('SEND_MESSAGES')) {
-          const reply = await message.reply(errorMessage);
-          // Auto-delete error messages after 10 seconds
-          setTimeout(() => {
-            if (reply.deletable) reply.delete().catch(() => {});
-          }, 10000);
-        }
-      } catch (e) {
-        logger.error('Failed to send error message', e);
-      }
-      
-      return true;
-    }
-  }
-
-  /**
-   * Check if a user has permission to use a command
-   * @param {import('discord.js').Message} message - The message that triggered the command
-   * @param {Object} command - The command to check
-   * @returns {Promise<boolean>} True if user has permission
-   */
-  async checkPermissions(message, command) {
-    // Owner bypass
-    if (command.ownerOnly && message.author.id !== message.client.ownerId) {
-      return false;
-    }
-
-    // Check user permissions
-    if (command.userPermissions) {
-      const missingPermissions = message.channel.permissionsFor(message.author)
-        .missing(command.userPermissions);
-      
-      if (missingPermissions.length > 0) {
-        return false;
-      }
-    }
-
-    // Check bot permissions
-    if (command.botPermissions) {
-      const missingPermissions = message.channel.permissionsFor(message.guild.me)
-        .missing(command.botPermissions);
-      
-      if (missingPermissions.length > 0) {
-        return false;
-      }
-    }
-
-    // Check role-based permissions
-    if (command.requiredRoles && command.requiredRoles.length > 0) {
-      const member = await message.guild.members.fetch(message.author.id);
-      const hasRole = command.requiredRoles.some(roleId => 
-        member.roles.cache.has(roleId)
-      );
-      
-      if (!hasRole) {
-        return false;
-      }
-    }
-
-    return true;
+    return { limited: false };
   }
 }
 
-// Export a singleton instance
+// Create and export a singleton instance
 const commandHandler = new CommandHandler();
 
+// For backward compatibility
 module.exports = commandHandler;
+module.exports.CommandHandler = CommandHandler;

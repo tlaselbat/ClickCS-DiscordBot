@@ -1,3 +1,7 @@
+//TODO  modify the vc-channel command and vc-config to allow multiple roles to be assigned 1 channel
+
+
+
 /**
  * Command to manage voice channel role assignments
  * @module commands/vc-channel

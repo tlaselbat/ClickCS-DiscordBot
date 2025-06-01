@@ -22,5 +22,9 @@
   "messages": {
     "welcome": "Welcome to our server, {user}!",
     "goodbye": "Goodbye, {user}!"
-  }
+  },
+  "channelRoles": {
+    "1374029365251276941": "1377968059003703357"
+  },
+  "enabled": true
 }

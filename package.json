@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node --expose-gc --trace-warnings main.js",
     "dev": "nodemon --inspect=0.0.0.0:9229 --trace-warnings main.js",
+    "deploy": "node src/deploy-commands.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --config=jest.config.js --watch",
     "test:debug": "cross-env NODE_OPTIONS=--inspect-brk --experimental-vm-modules jest --config=jest.config.js --runInBand",
@@ -17,10 +18,10 @@
     "check-updates": "npx npm-check-updates"
   },
   "dependencies": {
-    "@discordjs/rest": "^1.1.0",
+    "@discordjs/rest": "^1.7.1",
     "@jest/globals": "^29.7.0",
     "@sapphire/ratelimits": "^2.4.11",
-    "discord-api-types": "^0.38.0",
+    "discord-api-types": "^0.38.10",
     "discord.js": "^14.15.3",
     "dotenv": "^16.4.5",
     "joi": "^17.13.3",
